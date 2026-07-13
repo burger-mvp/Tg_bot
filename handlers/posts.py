@@ -1,5 +1,7 @@
 """Создание постов, модерация супер-администратором и постановка в очередь."""
 
+import logging
+
 from typing import Any, Final
 from uuid import UUID, uuid4
 
@@ -34,6 +36,7 @@ from utils.publishing import send_queued_post
 
 
 router = Router(name=__name__)
+logger = logging.getLogger(__name__)
 MAX_MEDIA_FILES: Final = 30
 MAX_DESCRIPTION_LENGTH: Final = 4_000
 CREATE_POST_TEXTS: Final = frozenset({"Создать пост", "Create post", "إنشاء منشور"})
@@ -114,26 +117,36 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
     post_text = format_post_text(description, post_kind, price_data)
     post_id = uuid4()
     status = "queued" if role != "user" else "pending_moderation"
-    await create_post(
-        post_id=post_id,
-        author_telegram_id=message.from_user.id,
-        author_role=role,
-        language_code=language_code,
-        media_file_ids=[str(file_id) for file_id in media_file_ids],
-        description=description,
-        post_kind=post_kind,
-        price_data=price_data,
-        post_text=post_text,
-        status=status,
-        scheduled_at=next_publication_slot(),
-    )
+    try:
+        await create_post(
+            post_id=post_id,
+            author_telegram_id=message.from_user.id,
+            author_role=role,
+            language_code=language_code,
+            media_file_ids=[str(file_id) for file_id in media_file_ids],
+            description=description,
+            post_kind=post_kind,
+            price_data=price_data,
+            post_text=post_text,
+            status=status,
+            scheduled_at=next_publication_slot(),
+        )
+    except Exception:
+        logger.exception("Не удалось сохранить пост пользователя %s в post_queue", message.from_user.id)
+        await message.answer(t(language_code, "post_save_failed"))
+        return
     await state.clear()
 
     if role != "user":
         await message.answer(t(language_code, "post_added_queue"))
         return
 
-    post = await get_post(post_id)
+    try:
+        post = await get_post(post_id)
+    except Exception:
+        logger.exception("Не удалось прочитать сохраненный пост %s для модерации", post_id)
+        await message.answer(t(language_code, "post_save_failed"))
+        return
     if post is None:
         await message.answer(t(language_code, "moderation_delivery_failed"))
         return
