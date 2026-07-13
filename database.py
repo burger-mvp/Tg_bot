@@ -2,7 +2,7 @@
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Final
 from uuid import UUID
 
@@ -317,14 +317,14 @@ async def claim_next_queued_post() -> QueuedPost | None:
     return _record_to_post(record) if record is not None else None
 
 
-async def mark_post_published(post_id: UUID) -> datetime | None:
-    """Фиксирует публикацию и возвращает момент планируемого повтора через неделю."""
+async def mark_post_published(post_id: UUID, duplicate_after: timedelta) -> datetime | None:
+    """Фиксирует публикацию и возвращает момент однократного повтора."""
     return await _get_pool().fetchval(
         """
         UPDATE post_queue
         SET status = 'published',
             published_at = NOW(),
-            duplicate_due_at = NOW() + INTERVAL '7 days',
+            duplicate_due_at = NOW() + $2::interval,
             updated_at = NOW(),
             last_error = NULL
         WHERE id = $1
@@ -332,6 +332,7 @@ async def mark_post_published(post_id: UUID) -> datetime | None:
         RETURNING duplicate_due_at
         """,
         post_id,
+        duplicate_after,
     )
 
 

@@ -4,9 +4,11 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
 from aiogram.exceptions import TelegramNetworkError
 
-from config import TOKEN
+from config import TELEGRAM_API_SERVER_URL, TOKEN
 from database import close_db, init_db
 from handlers.admin import router as admin_router
 from handlers.posts import router as posts_router
@@ -18,6 +20,18 @@ from scheduler.post_scheduler import PostScheduler
 NETWORK_RETRY_DELAY_SECONDS = 5
 
 
+def create_bot() -> Bot:
+    """Создает бота с официальным API или с заданным локальным Bot API сервером."""
+    if TELEGRAM_API_SERVER_URL is None:
+        return Bot(token=TOKEN)
+
+    session = AiohttpSession(
+        api=TelegramAPIServer.from_base(TELEGRAM_API_SERVER_URL, is_local=True),
+    )
+    logging.info("Используется локальный Telegram Bot API сервер: %s", TELEGRAM_API_SERVER_URL)
+    return Bot(token=TOKEN, session=session)
+
+
 async def main() -> None:
     """Инициализирует зависимости и запускает long polling."""
     logging.basicConfig(
@@ -25,7 +39,7 @@ async def main() -> None:
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     )
 
-    bot = Bot(token=TOKEN)
+    bot = create_bot()
     dispatcher = Dispatcher()
     dispatcher.update.outer_middleware(RoleMiddleware())
     dispatcher.include_router(start_router)

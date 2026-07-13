@@ -6,6 +6,7 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from scheduler.post_scheduler import next_publication_slot
+from scheduler.post_scheduler import TEST_DUPLICATE_DELAY, TEST_QUEUE_INTERVAL, duplicate_delay, queue_slot_interval
 from utils.pricing import (
     BODY_MARKUP,
     ENGINE_MARKUP,
@@ -113,6 +114,10 @@ def test_prices_text_and_slots() -> None:
     assert next_publication_slot(datetime(2026, 7, 13, 22, 1, tzinfo=moscow)).isoformat().startswith(
         "2026-07-14T09:00:00"
     )
+    assert queue_slot_interval().total_seconds() == 30 * 60
+    assert duplicate_delay().total_seconds() == 7 * 24 * 60 * 60
+    assert TEST_QUEUE_INTERVAL.total_seconds() == 60
+    assert TEST_DUPLICATE_DELAY.total_seconds() == 3 * 60
 
 
 if __name__ == "__main__":

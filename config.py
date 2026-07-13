@@ -29,6 +29,19 @@ def _parse_admin_ids(raw_ids: str) -> list[int]:
         raise RuntimeError("ADMIN_IDS должен содержать Telegram ID через запятую.") from error
 
 
+def _parse_bool(name: str, default: bool = False) -> bool:
+    """Читает булево значение окружения и отклоняет неоднозначные настройки."""
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    value = raw_value.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off", ""}:
+        return False
+    raise RuntimeError(f"{name} должен быть True или False.")
+
+
 TOKEN = _required_value("TOKEN")
 DATABASE_URL = _required_value("DATABASE_URL")
 
@@ -39,6 +52,8 @@ except ValueError as error:
     raise RuntimeError("SUPER_ADMIN_ID и CHANNEL_ID должны быть целыми числами.") from error
 
 ADMIN_IDS = _parse_admin_ids(_required_value("ADMIN_IDS"))
+TEST_MODE = _parse_bool("TEST_MODE")
+TELEGRAM_API_SERVER_URL = os.getenv("TELEGRAM_API_SERVER_URL", "").strip().rstrip("/") or None
 
 # Время работы очереди определяется в локальном часовом поясе бизнеса.
 # По умолчанию публикации идут с 09:00 до 22:00 по московскому времени.

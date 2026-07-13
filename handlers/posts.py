@@ -11,7 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
-from config import SUPER_ADMIN_ID
+from config import SUPER_ADMIN_ID, TELEGRAM_API_SERVER_URL
 from database import (
     approve_post,
     create_post,
@@ -39,6 +39,7 @@ router = Router(name=__name__)
 logger = logging.getLogger(__name__)
 MAX_MEDIA_FILES: Final = 30
 MAX_MEDIA_FILE_SIZE_BYTES: Final = 20 * 1024 * 1024
+MAX_LOCAL_API_MEDIA_FILE_SIZE_BYTES: Final = 2_000 * 1_000_000
 MAX_DESCRIPTION_LENGTH: Final = 4_000
 CREATE_POST_TEXTS: Final = frozenset({"Создать пост", "Create post", "إنشاء منشور"})
 
@@ -103,8 +104,13 @@ async def _save_media_item(
 ) -> None:
     """Добавляет обычное видео или видео-файл к текущему создаваемому посту."""
     language_code = await _language_from_state_or_database(message, state)
-    if file_size is not None and file_size > MAX_MEDIA_FILE_SIZE_BYTES:
-        await message.answer(t(language_code, "media_too_large"), reply_markup=media_step_keyboard(language_code))
+    max_file_size = MAX_LOCAL_API_MEDIA_FILE_SIZE_BYTES if TELEGRAM_API_SERVER_URL else MAX_MEDIA_FILE_SIZE_BYTES
+    max_file_size_mb = 2_000 if TELEGRAM_API_SERVER_URL else 20
+    if file_size is not None and file_size > max_file_size:
+        await message.answer(
+            t(language_code, "media_too_large", max_size_mb=max_file_size_mb),
+            reply_markup=media_step_keyboard(language_code),
+        )
         return
     data = await state.get_data()
     media_items = data.get("media_items")

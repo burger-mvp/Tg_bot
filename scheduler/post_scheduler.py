@@ -9,8 +9,9 @@ from aiogram.exceptions import TelegramAPIError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
-from config import CHANNEL_ID, SCHEDULER_TIMEZONE
+from config import CHANNEL_ID, SCHEDULER_TIMEZONE, TEST_MODE
 from database import (
     claim_next_queued_post,
     claim_post_for_duplicate,
@@ -30,11 +31,26 @@ WORKDAY_START = time(hour=9)
 WORKDAY_END = time(hour=22)
 SLOT_INTERVAL = timedelta(minutes=30)
 DUPLICATE_RETRY_DELAY = timedelta(minutes=5)
+TEST_QUEUE_INTERVAL = timedelta(minutes=1)
+PRODUCTION_DUPLICATE_DELAY = timedelta(days=7)
+TEST_DUPLICATE_DELAY = timedelta(minutes=3)
+
+
+def queue_slot_interval() -> timedelta:
+    """Возвращает интервал обработки очереди для текущего режима работы."""
+    return TEST_QUEUE_INTERVAL if TEST_MODE else SLOT_INTERVAL
+
+
+def duplicate_delay() -> timedelta:
+    """Возвращает задержку единственного повтора публикации для текущего режима."""
+    return TEST_DUPLICATE_DELAY if TEST_MODE else PRODUCTION_DUPLICATE_DELAY
 
 
 def next_publication_slot(now: datetime | None = None) -> datetime:
-    """Возвращает ближайший допустимый 30-минутный слот между 09:00 и 22:00."""
+    """Возвращает ближайший слот: каждую минуту в тесте, иначе по рабочему графику."""
     current = now.astimezone(SCHEDULER_TIMEZONE) if now else datetime.now(SCHEDULER_TIMEZONE)
+    if TEST_MODE:
+        return current.replace(second=0, microsecond=0) + TEST_QUEUE_INTERVAL
     day_start = current.replace(hour=WORKDAY_START.hour, minute=0, second=0, microsecond=0)
     day_end = current.replace(hour=WORKDAY_END.hour, minute=0, second=0, microsecond=0)
 
@@ -66,22 +82,32 @@ class PostScheduler:
         """Восстанавливает повторы после рестарта и запускает проверку слотов."""
         await recover_interrupted_posts(next_publication_slot())
         await recover_interrupted_duplicates()
-        self._scheduler.add_job(
-            self.publish_next_post,
-            CronTrigger(hour="9-21", minute="0,30", timezone=SCHEDULER_TIMEZONE),
-            id="publish_queue_half_hour_slots",
-            replace_existing=True,
-            coalesce=True,
-            max_instances=1,
-        )
-        self._scheduler.add_job(
-            self.publish_next_post,
-            CronTrigger(hour="22", minute="0", timezone=SCHEDULER_TIMEZONE),
-            id="publish_queue_last_slot",
-            replace_existing=True,
-            coalesce=True,
-            max_instances=1,
-        )
+        if TEST_MODE:
+            self._scheduler.add_job(
+                self.publish_next_post,
+                IntervalTrigger(minutes=1, timezone=SCHEDULER_TIMEZONE),
+                id="publish_queue_test_each_minute",
+                replace_existing=True,
+                coalesce=True,
+                max_instances=1,
+            )
+        else:
+            self._scheduler.add_job(
+                self.publish_next_post,
+                CronTrigger(hour="9-21", minute="0,30", timezone=SCHEDULER_TIMEZONE),
+                id="publish_queue_half_hour_slots",
+                replace_existing=True,
+                coalesce=True,
+                max_instances=1,
+            )
+            self._scheduler.add_job(
+                self.publish_next_post,
+                CronTrigger(hour="22", minute="0", timezone=SCHEDULER_TIMEZONE),
+                id="publish_queue_last_slot",
+                replace_existing=True,
+                coalesce=True,
+                max_instances=1,
+            )
         now = datetime.now(SCHEDULER_TIMEZONE)
         for post_id, duplicate_due_at in await get_posts_waiting_for_duplicate():
             # После долгого простоя APScheduler не запускает просроченный DateTrigger.
@@ -98,7 +124,7 @@ class PostScheduler:
         """Отправляет только один пост в текущем слоте очереди."""
         now = datetime.now(SCHEDULER_TIMEZONE)
         current_time = now.time().replace(tzinfo=None)
-        if current_time < WORKDAY_START or current_time > WORKDAY_END:
+        if not TEST_MODE and (current_time < WORKDAY_START or current_time > WORKDAY_END):
             return
 
         post = await claim_next_queued_post()
@@ -108,10 +134,10 @@ class PostScheduler:
             await send_queued_post(self._bot, CHANNEL_ID, post)
         except TelegramAPIError as error:
             logger.exception("Не удалось опубликовать пост %s в канале: %s", post.id, error)
-            await mark_publication_failed(post.id, str(error), next_publication_slot(now + SLOT_INTERVAL))
+            await mark_publication_failed(post.id, str(error), next_publication_slot(now + queue_slot_interval()))
             return
 
-        duplicate_due_at = await mark_post_published(post.id)
+        duplicate_due_at = await mark_post_published(post.id, duplicate_delay())
         if duplicate_due_at is not None:
             self.schedule_duplicate(post.id, duplicate_due_at)
 
