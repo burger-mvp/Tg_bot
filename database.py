@@ -198,8 +198,8 @@ async def create_post(
             id, author_telegram_id, author_role, language_code, media_file_ids,
             description, post_kind, price_data, post_text, status, approved_at, scheduled_at
         )
-        VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8::jsonb, $9, $10,
-                CASE WHEN $10 = 'queued' THEN NOW() ELSE NULL END,
+        VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8::jsonb, $9, $10::varchar,
+                CASE WHEN $10::varchar = 'queued' THEN NOW() ELSE NULL END,
                 $11)
         """,
         post_id,
