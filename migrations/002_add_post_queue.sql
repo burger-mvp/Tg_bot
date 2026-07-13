@@ -1,15 +1,16 @@
--- Основные пользователи бота.
-CREATE TABLE IF NOT EXISTS users (
-    telegram_id BIGINT PRIMARY KEY,
-    phone_number TEXT,
-    role VARCHAR(20) NOT NULL DEFAULT 'user'
-        CHECK (role IN ('user', 'admin', 'super_admin')),
-    language_code VARCHAR(2) CHECK (language_code IN ('ru', 'en', 'ar') OR language_code IS NULL),
-    registered_at TIMESTAMPTZ
-);
+-- Выполните этот файл в PostgreSQL Railway перед деплоем версии с очередью.
+-- Он не удаляет пользователей и не затрагивает старую таблицу posts.
 
--- Очередь модерации, отложенных публикаций и повторов через семь дней.
--- UUID формируется в Python, поэтому расширения PostgreSQL не требуются.
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS registered_at TIMESTAMPTZ;
+
+-- Пользователи, зарегистрированные в предыдущей версии, не считаются новыми:
+-- им не будут повторно отправляться уведомления администраторам.
+UPDATE users
+SET registered_at = NOW()
+WHERE phone_number IS NOT NULL
+  AND registered_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS post_queue (
     id UUID PRIMARY KEY,
     author_telegram_id BIGINT NOT NULL REFERENCES users (telegram_id),
@@ -43,3 +44,13 @@ CREATE INDEX IF NOT EXISTS post_queue_ready_for_publication_idx
 CREATE INDEX IF NOT EXISTS post_queue_duplicate_idx
     ON post_queue (duplicate_due_at)
     WHERE status = 'published';
+
+-- На случай, если деплой произошел во время отправки в старой версии приложения.
+UPDATE post_queue
+SET status = 'queued',
+    scheduled_at = NOW()
+WHERE status = 'publishing';
+
+UPDATE post_queue
+SET status = 'published'
+WHERE status = 'duplicate_publishing';

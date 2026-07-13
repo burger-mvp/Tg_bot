@@ -9,7 +9,10 @@ from aiogram.exceptions import TelegramNetworkError
 from config import TOKEN
 from database import close_db, init_db
 from handlers.admin import router as admin_router
+from handlers.posts import router as posts_router
 from handlers.start import router as start_router
+from middlewares.role import RoleMiddleware
+from scheduler.post_scheduler import PostScheduler
 
 
 NETWORK_RETRY_DELAY_SECONDS = 5
@@ -24,10 +27,14 @@ async def main() -> None:
 
     bot = Bot(token=TOKEN)
     dispatcher = Dispatcher()
+    dispatcher.update.outer_middleware(RoleMiddleware())
     dispatcher.include_router(start_router)
     dispatcher.include_router(admin_router)
+    dispatcher.include_router(posts_router)
 
     await init_db()
+    post_scheduler = PostScheduler(bot)
+    await post_scheduler.start()
     try:
         while True:
             try:
@@ -43,6 +50,7 @@ async def main() -> None:
                 )
                 await asyncio.sleep(NETWORK_RETRY_DELAY_SECONDS)
     finally:
+        post_scheduler.shutdown()
         await close_db()
         await bot.session.close()
 

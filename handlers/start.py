@@ -1,6 +1,10 @@
-"""Выбор языка, регистрация и главное меню."""
+"""Регистрация пользователя: язык, контакт и главное меню."""
 
-from aiogram import F, Router
+import logging
+from typing import Final
+
+from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -9,35 +13,33 @@ from aiogram.types import CallbackQuery, Message
 from database import (
     get_user_language,
     get_user_phone_number,
-    update_user_phone_number,
+    save_phone_number_and_mark_registered,
     update_user_role,
     upsert_user,
 )
-from keyboards import LANGUAGE_KEYBOARD, main_menu
+from keyboards import LANGUAGE_KEYBOARD, main_menu, phone_keyboard
 from locales import SUPPORTED_LANGUAGE_CODES, t
-from roles import get_role
+from roles import get_role, notification_recipient_ids
 
 
 router = Router(name=__name__)
-MAX_PHONE_NUMBER_LENGTH = 64
+logger = logging.getLogger(__name__)
+MAX_PHONE_NUMBER_LENGTH: Final = 64
 
 
 class Registration(StatesGroup):
-    """Шаги регистрации: после выбора языка ожидается номер телефона."""
+    """Единственный обязательный шаг после выбора языка."""
 
     waiting_for_phone = State()
 
 
 async def show_welcome(message: Message, role: str, language_code: str) -> None:
-    """Отправляет приветствие и соответствующее роли Reply-меню."""
-    if role == "user":
-        await message.answer(
-            t(language_code, "welcome_user"),
-            reply_markup=main_menu(role, language_code),
-        )
-        return
-
-    greeting_key = "welcome_super_admin" if role == "super_admin" else "welcome_admin"
+    """Отправляет приветствие и главное Reply-меню для роли пользователя."""
+    greeting_key = {
+        "user": "welcome_user",
+        "admin": "welcome_admin",
+        "super_admin": "welcome_super_admin",
+    }[role]
     await message.answer(
         t(language_code, greeting_key),
         reply_markup=main_menu(role, language_code),
@@ -45,15 +47,26 @@ async def show_welcome(message: Message, role: str, language_code: str) -> None:
 
 
 async def request_phone_number(message: Message, state: FSMContext, language_code: str) -> None:
-    """Переводит пользователя на шаг ввода номера телефона."""
+    """Запрашивает контакт через Telegram-кнопку, а не произвольный текст."""
     await state.set_state(Registration.waiting_for_phone)
     await state.update_data(language_code=language_code)
-    await message.answer(t(language_code, "enter_phone"))
+    await message.answer(t(language_code, "enter_phone"), reply_markup=phone_keyboard(language_code))
+
+
+async def _notify_registration(bot: Bot, telegram_id: int, phone_number: str) -> None:
+    """Уведомляет всех ответственных о первой завершенной регистрации."""
+    notification = f"Зарегистрирован новый пользователь! ID: {telegram_id}, Номер телефона: {phone_number}"
+    for recipient_id in notification_recipient_ids():
+        try:
+            await bot.send_message(recipient_id, notification)
+        except TelegramAPIError:
+            # Бот не может написать пользователю, который ни разу не открывал с ним чат.
+            logger.warning("Не удалось отправить уведомление о регистрации пользователю %s", recipient_id)
 
 
 @router.message(CommandStart())
 async def command_start(message: Message, state: FSMContext) -> None:
-    """Запускает регистрацию: язык, номер телефона, затем главное меню."""
+    """Запускает или продолжает регистрацию, не повторяя уже пройденные шаги."""
     if message.from_user is None:
         return
 
@@ -75,8 +88,8 @@ async def command_start(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("language:"))
 async def select_language(callback: CallbackQuery, state: FSMContext) -> None:
-    """Сохраняет язык и переводит нового пользователя к вводу номера."""
-    if callback.from_user is None or callback.message is None or callback.data is None:
+    """Сохраняет язык и переводит пользователя на шаг передачи контакта."""
+    if callback.message is None or callback.data is None:
         return
 
     language_code = callback.data.removeprefix("language:")
@@ -98,10 +111,10 @@ async def select_language(callback: CallbackQuery, state: FSMContext) -> None:
     await show_welcome(callback.message, role, language_code)
 
 
-@router.message(Registration.waiting_for_phone, F.text)
-async def save_phone_number(message: Message, state: FSMContext) -> None:
-    """Сохраняет номер телефона и завершает регистрацию пользователя."""
-    if message.from_user is None or message.text is None:
+@router.message(Registration.waiting_for_phone, F.contact)
+async def save_phone_number(message: Message, state: FSMContext, bot: Bot) -> None:
+    """Принимает только собственный Telegram-контакт и завершает регистрацию."""
+    if message.from_user is None or message.contact is None:
         return
 
     language_code = (await state.get_data()).get("language_code")
@@ -112,43 +125,31 @@ async def save_phone_number(message: Message, state: FSMContext) -> None:
         await message.answer(t("ru", "choose_language"), reply_markup=LANGUAGE_KEYBOARD)
         return
 
-    phone_number = message.text.strip()
-    if not phone_number:
-        await message.answer(t(language_code, "phone_empty"))
+    if message.contact.user_id != message.from_user.id:
+        await message.answer(t(language_code, "foreign_contact"), reply_markup=phone_keyboard(language_code))
         return
-    if len(phone_number) > MAX_PHONE_NUMBER_LENGTH:
-        await message.answer(
-            t(language_code, "phone_too_long", max_length=MAX_PHONE_NUMBER_LENGTH)
-        )
+
+    phone_number = message.contact.phone_number.strip()
+    if not phone_number or len(phone_number) > MAX_PHONE_NUMBER_LENGTH:
+        await message.answer(t(language_code, "send_contact_only"), reply_markup=phone_keyboard(language_code))
         return
 
     role = get_role(message.from_user.id)
-    await update_user_role(message.from_user.id, role)
-    await update_user_phone_number(message.from_user.id, phone_number)
+    is_new_registration = await save_phone_number_and_mark_registered(
+        message.from_user.id,
+        phone_number,
+        role,
+    )
     await state.clear()
 
     await message.answer(t(language_code, "registration_complete"))
     await show_welcome(message, role, language_code)
+    if is_new_registration:
+        await _notify_registration(bot, message.from_user.id, phone_number)
 
 
 @router.message(Registration.waiting_for_phone)
-async def reject_non_text_phone(message: Message, state: FSMContext) -> None:
-    """Не принимает вложения вместо номера телефона."""
+async def reject_non_contact_phone(message: Message, state: FSMContext) -> None:
+    """Подсказывает корректный способ передачи номера телефона."""
     language_code = (await state.get_data()).get("language_code")
-    if language_code not in SUPPORTED_LANGUAGE_CODES:
-        language_code = "ru"
-    await message.answer(t(language_code, "send_phone_only"))
-
-
-@router.message(F.text.in_({"Создать пост", "Create post", "إنشاء منشور"}))
-async def create_post_placeholder(message: Message) -> None:
-    """Отвечает на пока не реализованное создание поста обычным пользователем."""
-    if message.from_user is None:
-        return
-
-    language_code = await get_user_language(message.from_user.id)
-    if language_code not in SUPPORTED_LANGUAGE_CODES:
-        await message.answer(t("ru", "language_required"))
-        return
-
-    await message.answer(t(language_code, "feature_in_development"))
+    await message.answer(t(language_code, "send_contact_only"), reply_markup=phone_keyboard(language_code))

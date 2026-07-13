@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import load_dotenv
 
@@ -38,3 +39,13 @@ except ValueError as error:
     raise RuntimeError("SUPER_ADMIN_ID и CHANNEL_ID должны быть целыми числами.") from error
 
 ADMIN_IDS = _parse_admin_ids(_required_value("ADMIN_IDS"))
+
+# Время работы очереди определяется в локальном часовом поясе бизнеса.
+# По умолчанию публикации идут с 09:00 до 22:00 по московскому времени.
+SCHEDULER_TIMEZONE_NAME = os.getenv("SCHEDULER_TIMEZONE", "Europe/Moscow")
+try:
+    SCHEDULER_TIMEZONE = ZoneInfo(SCHEDULER_TIMEZONE_NAME)
+except ZoneInfoNotFoundError as error:
+    raise RuntimeError(
+        "SCHEDULER_TIMEZONE должен быть корректным именем часового пояса, например Europe/Moscow."
+    ) from error
