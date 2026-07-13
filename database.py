@@ -84,6 +84,25 @@ async def get_user_language(telegram_id: int) -> str | None:
     )
 
 
+async def get_user_phone_number(telegram_id: int) -> str | None:
+    """Возвращает сохраненный номер телефона или None, если его еще нет."""
+    pool = _get_pool()
+    return await pool.fetchval(
+        "SELECT phone_number FROM users WHERE telegram_id = $1",
+        telegram_id,
+    )
+
+
+async def update_user_phone_number(telegram_id: int, phone_number: str) -> None:
+    """Сохраняет номер телефона пользователя после выбора языка."""
+    pool = _get_pool()
+    await pool.execute(
+        "UPDATE users SET phone_number = $2 WHERE telegram_id = $1",
+        telegram_id,
+        phone_number,
+    )
+
+
 async def update_user_role(telegram_id: int, role: str) -> None:
     """Синхронизирует сохраненную роль с актуальными настройками окружения."""
     pool = _get_pool()
