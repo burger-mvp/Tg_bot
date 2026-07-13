@@ -93,6 +93,27 @@ def _price_data(data: dict[str, Any]) -> dict[str, Any]:
     return prices if isinstance(prices, dict) else {}
 
 
+async def _save_media_item(
+    message: Message,
+    state: FSMContext,
+    media_type: str,
+    file_id: str,
+) -> None:
+    """Добавляет обычное видео или видео-файл к текущему создаваемому посту."""
+    language_code = await _language_from_state_or_database(message, state)
+    data = await state.get_data()
+    media_items = data.get("media_items")
+    if not isinstance(media_items, list):
+        media_items = []
+    if len(media_items) >= MAX_MEDIA_FILES:
+        await message.answer(t(language_code, "media_limit", max_count=MAX_MEDIA_FILES))
+        return
+
+    media_items.append({"type": media_type, "file_id": file_id})
+    await state.update_data(media_items=media_items)
+    await message.answer(t(language_code, "media_saved", count=len(media_items), max_count=MAX_MEDIA_FILES))
+
+
 async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, description: str) -> None:
     """Собирает текст, сохраняет пост и направляет его в нужный бизнес-процесс."""
     if message.from_user is None:
@@ -100,12 +121,12 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
 
     data = await state.get_data()
     language_code = normalize_language_code(data.get("language_code"))
-    media_file_ids = data.get("media_file_ids")
+    media_items = data.get("media_items")
     post_kind = data.get("post_kind")
     price_data = _price_data(data)
     if (
-        not isinstance(media_file_ids, list)
-        or not media_file_ids
+        not isinstance(media_items, list)
+        or not media_items
         or not isinstance(post_kind, str)
         or not price_data
     ):
@@ -123,7 +144,7 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
             author_telegram_id=message.from_user.id,
             author_role=role,
             language_code=language_code,
-            media_file_ids=[str(file_id) for file_id in media_file_ids],
+            media_items=[item for item in media_items if isinstance(item, dict)],
             description=description,
             post_kind=post_kind,
             price_data=price_data,
@@ -202,7 +223,7 @@ async def start_post_creation(message: Message, state: FSMContext) -> None:
 
     await state.clear()
     await state.set_state(PostCreation.waiting_for_media)
-    await state.update_data(language_code=language_code, media_file_ids=[])
+    await state.update_data(language_code=language_code, media_items=[])
     await message.answer(t(language_code, "send_videos"), reply_markup=media_step_keyboard(language_code))
 
 
@@ -211,18 +232,22 @@ async def collect_video(message: Message, state: FSMContext) -> None:
     """Добавляет каждое видео, включая элементы Telegram-альбомов, в FSM-список."""
     if message.video is None:
         return
-    language_code = await _language_from_state_or_database(message, state)
-    data = await state.get_data()
-    media_file_ids = data.get("media_file_ids")
-    if not isinstance(media_file_ids, list):
-        media_file_ids = []
-    if len(media_file_ids) >= MAX_MEDIA_FILES:
-        await message.answer(t(language_code, "media_limit", max_count=MAX_MEDIA_FILES))
-        return
+    await _save_media_item(message, state, "video", message.video.file_id)
 
-    media_file_ids.append(message.video.file_id)
-    await state.update_data(media_file_ids=media_file_ids)
-    await message.answer(t(language_code, "media_saved", count=len(media_file_ids), max_count=MAX_MEDIA_FILES))
+
+@router.message(PostCreation.waiting_for_media, F.document)
+async def collect_video_document(message: Message, state: FSMContext) -> None:
+    """Принимает MP4/MOV и другие видео, отправленные Telegram как файл."""
+    if message.document is None:
+        return
+    mime_type = message.document.mime_type or ""
+    filename = (message.document.file_name or "").lower()
+    is_video_file = mime_type.startswith("video/") or filename.endswith((".mp4", ".mov", ".mkv", ".avi", ".webm"))
+    if not is_video_file:
+        language_code = await _language_from_state_or_database(message, state)
+        await message.answer(t(language_code, "send_video_only"), reply_markup=media_step_keyboard(language_code))
+        return
+    await _save_media_item(message, state, "document", message.document.file_id)
 
 
 @router.message(PostCreation.waiting_for_media)
@@ -232,14 +257,37 @@ async def reject_non_video(message: Message, state: FSMContext) -> None:
     await message.answer(t(language_code, "send_video_only"), reply_markup=media_step_keyboard(language_code))
 
 
+@router.message(F.video)
+@router.message(F.document)
+@router.message(F.animation)
+@router.message(F.video_note)
+async def explain_media_outside_post_creation(message: Message, state: FSMContext) -> None:
+    """Не оставляет без ответа медиа, присланное без активного шага загрузки."""
+    if message.from_user is None:
+        return
+
+    current_state = await state.get_state()
+    language_code = await _registered_language(message.from_user.id) or "ru"
+    logger.warning(
+        "Медиа вне шага загрузки: user_id=%s, state=%s, content_type=%s",
+        message.from_user.id,
+        current_state,
+        message.content_type,
+    )
+    if current_state is None:
+        await message.answer(t(language_code, "media_outside_post_creation"))
+        return
+    await message.answer(t(language_code, "media_not_expected"))
+
+
 @router.callback_query(PostCreation.waiting_for_media, F.data == "post:media_done")
 async def finish_media_collection(callback: CallbackQuery, state: FSMContext) -> None:
     """Завершает ручной сбор медиа и показывает выбор категории."""
     if callback.message is None:
         return
     language_code = normalize_language_code((await state.get_data()).get("language_code"))
-    media_file_ids = (await state.get_data()).get("media_file_ids")
-    if not isinstance(media_file_ids, list) or not media_file_ids:
+    media_items = (await state.get_data()).get("media_items")
+    if not isinstance(media_items, list) or not media_items:
         await callback.answer(t(language_code, "no_media"), show_alert=True)
         return
     await callback.answer()

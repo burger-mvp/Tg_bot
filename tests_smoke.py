@@ -19,6 +19,9 @@ class FakeBot:
     async def send_media_group(self, chat_id: int, media: list[object]) -> list[tuple[str, int, int]]:
         return [("group", chat_id, len(media))]
 
+    async def send_document(self, chat_id: int, document: str) -> tuple[str, int, str]:
+        return ("document", chat_id, document)
+
     async def send_message(
         self,
         chat_id: int,
@@ -32,13 +35,22 @@ class FakeBot:
 async def test_video_chunks() -> None:
     """Один файл отправляется как video, 11 файлов делятся на 10 + 1."""
     bot = FakeBot()
-    assert await send_post_content(bot, 1, ["one"], "text") == [
+    assert await send_post_content(bot, 1, [{"type": "video", "file_id": "one"}], "text") == [
         ("video", 1, "one"),
         ("text", 1, "text"),
     ]
-    assert await send_post_content(bot, 1, [str(index) for index in range(11)], "text") == [
+    assert await send_post_content(
+        bot,
+        1,
+        [{"type": "video", "file_id": str(index)} for index in range(11)],
+        "text",
+    ) == [
         ("group", 1, 10),
         ("video", 1, "10"),
+        ("text", 1, "text"),
+    ]
+    assert await send_post_content(bot, 1, [{"type": "document", "file_id": "movie"}], "text") == [
+        ("document", 1, "movie"),
         ("text", 1, "text"),
     ]
 

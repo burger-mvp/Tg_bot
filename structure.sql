@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS post_queue (
     author_role VARCHAR(20) NOT NULL
         CHECK (author_role IN ('user', 'admin', 'super_admin')),
     language_code VARCHAR(2) NOT NULL CHECK (language_code IN ('ru', 'en', 'ar')),
+    -- Элементы: {"type": "video" | "document", "file_id": "..."}.
     media_file_ids JSONB NOT NULL CHECK (jsonb_typeof(media_file_ids) = 'array'),
     description TEXT NOT NULL,
     post_kind VARCHAR(32) NOT NULL

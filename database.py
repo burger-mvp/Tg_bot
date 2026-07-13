@@ -25,7 +25,7 @@ class QueuedPost:
     author_telegram_id: int
     author_role: str
     language_code: str
-    media_file_ids: list[str]
+    media_items: list[dict[str, str]]
     description: str
     post_kind: str
     price_data: dict[str, Any]
@@ -80,7 +80,19 @@ def _record_to_post(record: asyncpg.Record) -> QueuedPost:
     """Преобразует запись PostgreSQL в типизированную модель очереди."""
     media_value = _decode_json(record["media_file_ids"], [])
     prices_value = _decode_json(record["price_data"], {})
-    media_file_ids = [str(file_id) for file_id in media_value] if isinstance(media_value, list) else []
+    media_items: list[dict[str, str]] = []
+    if isinstance(media_value, list):
+        for item in media_value:
+            if isinstance(item, str):
+                # Обратная совместимость с постами, сохраненными предыдущей версией.
+                media_items.append({"type": "video", "file_id": item})
+            elif isinstance(item, dict) and isinstance(item.get("file_id"), str):
+                media_items.append(
+                    {
+                        "type": str(item.get("type", "video")),
+                        "file_id": item["file_id"],
+                    }
+                )
     price_data = prices_value if isinstance(prices_value, dict) else {}
 
     return QueuedPost(
@@ -88,7 +100,7 @@ def _record_to_post(record: asyncpg.Record) -> QueuedPost:
         author_telegram_id=record["author_telegram_id"],
         author_role=record["author_role"],
         language_code=record["language_code"],
-        media_file_ids=media_file_ids,
+        media_items=media_items,
         description=record["description"],
         post_kind=record["post_kind"],
         price_data=price_data,
@@ -183,7 +195,7 @@ async def create_post(
     author_telegram_id: int,
     author_role: str,
     language_code: str,
-    media_file_ids: list[str],
+    media_items: list[dict[str, str]],
     description: str,
     post_kind: str,
     price_data: dict[str, Any],
@@ -206,7 +218,7 @@ async def create_post(
         author_telegram_id,
         author_role,
         language_code,
-        json.dumps(media_file_ids),
+        json.dumps(media_items),
         description,
         post_kind,
         json.dumps(price_data),
