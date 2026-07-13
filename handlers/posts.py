@@ -38,6 +38,7 @@ from utils.publishing import send_queued_post
 router = Router(name=__name__)
 logger = logging.getLogger(__name__)
 MAX_MEDIA_FILES: Final = 30
+MAX_MEDIA_FILE_SIZE_BYTES: Final = 20 * 1024 * 1024
 MAX_DESCRIPTION_LENGTH: Final = 4_000
 CREATE_POST_TEXTS: Final = frozenset({"Создать пост", "Create post", "إنشاء منشور"})
 
@@ -98,9 +99,13 @@ async def _save_media_item(
     state: FSMContext,
     media_type: str,
     file_id: str,
+    file_size: int | None,
 ) -> None:
     """Добавляет обычное видео или видео-файл к текущему создаваемому посту."""
     language_code = await _language_from_state_or_database(message, state)
+    if file_size is not None and file_size > MAX_MEDIA_FILE_SIZE_BYTES:
+        await message.answer(t(language_code, "media_too_large"), reply_markup=media_step_keyboard(language_code))
+        return
     data = await state.get_data()
     media_items = data.get("media_items")
     if not isinstance(media_items, list):
@@ -182,7 +187,7 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
             post,
             text_reply_markup=moderation_keyboard(str(post_id), language_code),
         )
-        moderation_message = moderation_messages[-1]
+        moderation_message = moderation_messages[0]
         await set_moderation_message(post_id, moderation_message.chat.id, moderation_message.message_id)
     except TelegramAPIError:
         await message.answer(t(language_code, "moderation_delivery_failed"))
@@ -232,7 +237,7 @@ async def collect_video(message: Message, state: FSMContext) -> None:
     """Добавляет каждое видео, включая элементы Telegram-альбомов, в FSM-список."""
     if message.video is None:
         return
-    await _save_media_item(message, state, "video", message.video.file_id)
+    await _save_media_item(message, state, "video", message.video.file_id, message.video.file_size)
 
 
 @router.message(PostCreation.waiting_for_media, F.document)
@@ -247,14 +252,14 @@ async def collect_video_document(message: Message, state: FSMContext) -> None:
         language_code = await _language_from_state_or_database(message, state)
         await message.answer(t(language_code, "send_video_only"), reply_markup=media_step_keyboard(language_code))
         return
-    await _save_media_item(message, state, "document", message.document.file_id)
+    await _save_media_item(message, state, "document", message.document.file_id, message.document.file_size)
 
 
 @router.message(PostCreation.waiting_for_media)
 async def reject_non_video(message: Message, state: FSMContext) -> None:
-    """Не позволяет перейти дальше с неподдерживаемыми вложениями."""
+    """Не позволяет перейти дальше с текстом или неподдерживаемым вложением."""
     language_code = await _language_from_state_or_database(message, state)
-    await message.answer(t(language_code, "send_video_only"), reply_markup=media_step_keyboard(language_code))
+    await message.answer(t(language_code, "media_expected"), reply_markup=media_step_keyboard(language_code))
 
 
 @router.message(F.video)
@@ -436,6 +441,17 @@ async def receive_body_price(message: Message, state: FSMContext, bot: Bot) -> N
 @router.message(
     PostCreation.waiting_for_engine_price,
     PostCreation.waiting_for_transmission_price,
+    PostCreation.waiting_for_body_price,
+)
+async def reject_non_text_price(message: Message, state: FSMContext) -> None:
+    """На шагах цены не принимает стикеры и другие нетекстовые сообщения."""
+    language_code = await _language_from_state_or_database(message, state)
+    await _answer_with_cancel(message, language_code, "invalid_price")
+
+
+@router.message(
+    PostCreation.waiting_for_engine_price,
+    PostCreation.waiting_for_transmission_price,
     PostCreation.waiting_for_description,
     PostCreation.waiting_for_body_description,
     PostCreation.waiting_for_body_price,
@@ -572,7 +588,7 @@ async def save_moderation_edit(message: Message, state: FSMContext, bot: Bot) ->
             updated_post,
             text_reply_markup=moderation_keyboard(str(updated_post.id), updated_post.language_code),
         )
-        moderation_message = moderation_messages[-1]
+        moderation_message = moderation_messages[0]
         await set_moderation_message(
             updated_post.id,
             moderation_message.chat.id,

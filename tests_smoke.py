@@ -6,38 +6,60 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from scheduler.post_scheduler import next_publication_slot
-from utils.pricing import BODY_MARKUP, ENGINE_MARKUP, convert_aed_to_usd, format_post_text
+from utils.pricing import (
+    BODY_MARKUP,
+    ENGINE_MARKUP,
+    TELEGRAM_CAPTION_LIMIT,
+    convert_aed_to_usd,
+    format_post_caption,
+    format_post_text,
+    parse_aed_price,
+)
 from utils.publishing import send_post_content
 
 
 class FakeBot:
-    """Минимальная имитация Telegram Bot для проверки разбиения видео."""
+    """Минимальная имитация Telegram Bot для проверки отправки медиа."""
 
-    async def send_video(self, chat_id: int, video: str) -> tuple[str, int, str]:
-        return ("video", chat_id, video)
+    def __init__(self) -> None:
+        self.calls: list[tuple[object, ...]] = []
 
-    async def send_media_group(self, chat_id: int, media: list[object]) -> list[tuple[str, int, int]]:
-        return [("group", chat_id, len(media))]
-
-    async def send_document(self, chat_id: int, document: str) -> tuple[str, int, str]:
-        return ("document", chat_id, document)
-
-    async def send_message(
+    async def send_video(
         self,
         chat_id: int,
-        text: str,
+        video: str,
+        caption: str | None = None,
         reply_markup: object | None = None,
-    ) -> tuple[str, int, str]:
+    ) -> tuple[str, int, str, str | None]:
         del reply_markup
-        return ("text", chat_id, text)
+        result = ("video", chat_id, video, caption)
+        self.calls.append(result)
+        return result
+
+    async def send_media_group(self, chat_id: int, media: list[object]) -> list[tuple[str, int, int]]:
+        captions = [getattr(item, "caption", None) for item in media]
+        result = ("group", chat_id, len(media), *captions)
+        self.calls.append(result)
+        return [result]
+
+    async def send_document(
+        self,
+        chat_id: int,
+        document: str,
+        caption: str | None = None,
+        reply_markup: object | None = None,
+    ) -> tuple[str, int, str, str | None]:
+        del reply_markup
+        result = ("document", chat_id, document, caption)
+        self.calls.append(result)
+        return result
 
 
 async def test_video_chunks() -> None:
-    """Один файл отправляется как video, 11 файлов делятся на 10 + 1."""
+    """Текст становится подписью первого медиа, без отдельного сообщения."""
     bot = FakeBot()
     assert await send_post_content(bot, 1, [{"type": "video", "file_id": "one"}], "text") == [
-        ("video", 1, "one"),
-        ("text", 1, "text"),
+        ("video", 1, "one", "text"),
     ]
     assert await send_post_content(
         bot,
@@ -45,13 +67,11 @@ async def test_video_chunks() -> None:
         [{"type": "video", "file_id": str(index)} for index in range(11)],
         "text",
     ) == [
-        ("group", 1, 10),
-        ("video", 1, "10"),
-        ("text", 1, "text"),
+        ("group", 1, 10, "text", None, None, None, None, None, None, None, None, None),
+        ("video", 1, "10", None),
     ]
     assert await send_post_content(bot, 1, [{"type": "document", "file_id": "movie"}], "text") == [
-        ("document", 1, "movie"),
-        ("text", 1, "text"),
+        ("document", 1, "movie", "text"),
     ]
 
 
@@ -68,6 +88,20 @@ def test_prices_text_and_slots() -> None:
     assert text.startswith("🇦🇪 🇨🇳 🇷🇺 🇰🇿")
     assert "$110 USD" in text and "$220 USD" in text
     assert "@Kpp_Motors_Roman" in text
+
+    assert parse_aed_price("15000") == Decimal("15000")
+    for invalid_price in ("15000 ", "10к", "12500.50", "0"):
+        try:
+            parse_aed_price(invalid_price)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Цена {invalid_price!r} не была отклонена")
+
+    caption = format_post_caption("😀" * 4_000, "engine_only", {"engine": {"usd": 110}})
+    assert len(caption.encode("utf-16-le")) // 2 <= TELEGRAM_CAPTION_LIMIT
+    assert "...\n\nЦена ДВС: $110 USD" in caption
+    assert caption.endswith("https://www.youtube.com/@KppMotors")
 
     moscow = ZoneInfo("Europe/Moscow")
     assert next_publication_slot(datetime(2026, 7, 13, 8, 29, tzinfo=moscow)).isoformat().startswith(
