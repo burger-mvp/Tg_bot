@@ -1,0 +1,107 @@
+"""Тексты интерфейса на поддерживаемых языках."""
+
+from typing import Final
+
+
+DEFAULT_LANGUAGE_CODE: Final = "ru"
+SUPPORTED_LANGUAGE_CODES: Final = frozenset({"ru", "en", "ar"})
+
+TEXTS: Final[dict[str, dict[str, str]]] = {
+    "ru": {
+        "choose_language": "Выберите язык интерфейса:",
+        "language_saved": "Язык сохранен.",
+        "welcome_user": "Добро пожаловать! Выберите действие в меню ниже.",
+        "welcome_admin": "Добро пожаловать! Откройте административную панель.",
+        "welcome_super_admin": "Добро пожаловать, супер-администратор!",
+        "create_post": "Создать пост",
+        "admin_panel": "Админ-панель",
+        "super_admin_panel": "Панель супер-админа",
+        "feature_in_development": "Этот раздел будет добавлен в следующем блоке разработки.",
+        "language_required": "Сначала отправьте /start и выберите язык.",
+        "access_denied": "У вас нет доступа к административной панели.",
+        "enter_post_text": "Введите текст будущего поста.",
+        "text_empty": "Текст поста не должен быть пустым. Введите текст еще раз.",
+        "text_too_long": "Текст слишком длинный. Максимум: {max_length} символов.",
+        "send_text_only": "Пожалуйста, отправьте текст поста или нажмите «Отмена».",
+        "send_one_photo": "Теперь отправьте одно фото для поста или пропустите этот шаг.",
+        "send_photo_only": "Пожалуйста, отправьте одно фото, пропустите этот шаг или отмените создание поста.",
+        "skip_photo": "⏭ Пропустить фото",
+        "cancel": "❌ Отмена",
+        "post_preview": "Предпросмотр публикации:",
+        "long_photo_post": "Текст длиннее лимита подписи к фото Telegram. В канале он будет отправлен отдельным сообщением после фото.",
+        "publish": "🚀 Опубликовать в канал",
+        "publishing": "Публикую…",
+        "publish_in_progress": "Публикация уже выполняется. Пожалуйста, подождите.",
+        "post_published": "Пост успешно опубликован в канале.",
+        "post_publish_failed": "Не удалось опубликовать пост. Проверьте права бота в канале и попробуйте еще раз.",
+        "post_cancelled": "Создание поста отменено.",
+    },
+    "en": {
+        "choose_language": "Choose the interface language:",
+        "language_saved": "Language saved.",
+        "welcome_user": "Welcome! Choose an action from the menu below.",
+        "welcome_admin": "Welcome! Open the admin panel to continue.",
+        "welcome_super_admin": "Welcome, super administrator!",
+        "create_post": "Create post",
+        "admin_panel": "Admin panel",
+        "super_admin_panel": "Super admin panel",
+        "feature_in_development": "This section will be added in the next development block.",
+        "language_required": "First send /start and choose a language.",
+        "access_denied": "You do not have access to the admin panel.",
+        "enter_post_text": "Enter the text for the future post.",
+        "text_empty": "The post text cannot be empty. Please enter it again.",
+        "text_too_long": "The text is too long. Maximum: {max_length} characters.",
+        "send_text_only": "Please send the post text or tap Cancel.",
+        "send_one_photo": "Now send one photo for the post or skip this step.",
+        "send_photo_only": "Please send one photo, skip this step, or cancel the post creation.",
+        "skip_photo": "⏭ Skip photo",
+        "cancel": "❌ Cancel",
+        "post_preview": "Post preview:",
+        "long_photo_post": "The text is longer than Telegram's photo-caption limit, so it will be sent as a separate message after the photo.",
+        "publish": "🚀 Publish to channel",
+        "publishing": "Publishing…",
+        "publish_in_progress": "The post is already being published. Please wait.",
+        "post_published": "The post has been published to the channel.",
+        "post_publish_failed": "The post could not be published. Check the bot's channel permissions and try again.",
+        "post_cancelled": "Post creation cancelled.",
+    },
+    "ar": {
+        "choose_language": "اختر لغة الواجهة:",
+        "language_saved": "تم حفظ اللغة.",
+        "welcome_user": "مرحبًا! اختر إجراءً من القائمة أدناه.",
+        "welcome_admin": "مرحبًا! افتح لوحة الإدارة للمتابعة.",
+        "welcome_super_admin": "مرحبًا بك، مدير النظام!",
+        "create_post": "إنشاء منشور",
+        "admin_panel": "لوحة الإدارة",
+        "super_admin_panel": "لوحة مدير النظام",
+        "feature_in_development": "سيتم إضافة هذا القسم في المرحلة التالية من التطوير.",
+        "language_required": "أرسل /start أولًا واختر اللغة.",
+        "access_denied": "ليس لديك صلاحية الوصول إلى لوحة الإدارة.",
+        "enter_post_text": "أدخل نص المنشور الجديد.",
+        "text_empty": "لا يمكن أن يكون نص المنشور فارغًا. أدخله مرة أخرى.",
+        "text_too_long": "النص طويل جدًا. الحد الأقصى: {max_length} حرفًا.",
+        "send_text_only": "أرسل نص المنشور أو اضغط على «إلغاء».",
+        "send_one_photo": "أرسل الآن صورة واحدة للمنشور أو تخطَّ هذه الخطوة.",
+        "send_photo_only": "أرسل صورة واحدة أو تخطَّ هذه الخطوة أو ألغِ إنشاء المنشور.",
+        "skip_photo": "⏭ تخطي الصورة",
+        "cancel": "❌ إلغاء",
+        "post_preview": "معاينة المنشور:",
+        "long_photo_post": "النص أطول من الحد المسموح به لوصف الصورة في Telegram، وسيُرسل كرسالة منفصلة بعد الصورة.",
+        "publish": "🚀 نشر في القناة",
+        "publishing": "جارٍ النشر…",
+        "publish_in_progress": "النشر جارٍ بالفعل. يرجى الانتظار.",
+        "post_published": "تم نشر المنشور في القناة بنجاح.",
+        "post_publish_failed": "تعذر نشر المنشور. تحقق من صلاحيات البوت في القناة وحاول مرة أخرى.",
+        "post_cancelled": "تم إلغاء إنشاء المنشور.",
+    },
+}
+
+
+def normalize_language_code(language_code: str | None) -> str:
+    """Возвращает поддерживаемый код языка или язык по умолчанию."""
+    return language_code if language_code in SUPPORTED_LANGUAGE_CODES else DEFAULT_LANGUAGE_CODE
+
+
+def t(language_code: str | None, key: str, **kwargs: object) -> str:
+    """Возвращает локализованную строку по ключу."""
+    return TEXTS[normalize_language_code(language_code)][key].format(**kwargs)

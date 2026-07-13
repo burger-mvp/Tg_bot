@@ -8,6 +8,7 @@ from aiogram.exceptions import TelegramNetworkError
 
 from config import TOKEN
 from database import close_db, init_db
+from handlers.admin import router as admin_router
 from handlers.start import router as start_router
 
 
@@ -24,6 +25,7 @@ async def main() -> None:
     bot = Bot(token=TOKEN)
     dispatcher = Dispatcher()
     dispatcher.include_router(start_router)
+    dispatcher.include_router(admin_router)
 
     await init_db()
     try:

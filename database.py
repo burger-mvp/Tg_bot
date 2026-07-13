@@ -49,18 +49,20 @@ async def user_exists(telegram_id: int) -> bool:
     )
 
 
-async def add_user(telegram_id: int, phone_number: str, role: str) -> None:
-    """Добавляет пользователя; повторная регистрация не перезаписывает данные."""
+async def upsert_user(telegram_id: int, role: str, language_code: str) -> None:
+    """Создает пользователя или обновляет его актуальные роль и язык."""
     pool = _get_pool()
     await pool.execute(
         """
-        INSERT INTO users (telegram_id, phone_number, role)
+        INSERT INTO users (telegram_id, role, language_code)
         VALUES ($1, $2, $3)
-        ON CONFLICT (telegram_id) DO NOTHING
+        ON CONFLICT (telegram_id) DO UPDATE
+        SET role = EXCLUDED.role,
+            language_code = EXCLUDED.language_code
         """,
         telegram_id,
-        phone_number,
         role,
+        language_code,
     )
 
 
@@ -70,4 +72,36 @@ async def get_user_role(telegram_id: int) -> str | None:
     return await pool.fetchval(
         "SELECT role FROM users WHERE telegram_id = $1",
         telegram_id,
+    )
+
+
+async def get_user_language(telegram_id: int) -> str | None:
+    """Возвращает выбранный язык или None, если язык еще не выбран."""
+    pool = _get_pool()
+    return await pool.fetchval(
+        "SELECT language_code FROM users WHERE telegram_id = $1",
+        telegram_id,
+    )
+
+
+async def update_user_role(telegram_id: int, role: str) -> None:
+    """Синхронизирует сохраненную роль с актуальными настройками окружения."""
+    pool = _get_pool()
+    await pool.execute(
+        "UPDATE users SET role = $2 WHERE telegram_id = $1",
+        telegram_id,
+        role,
+    )
+
+
+async def save_published_post(description: str, media_id: str | None) -> None:
+    """Сохраняет факт успешной публикации в Telegram-канале."""
+    pool = _get_pool()
+    await pool.execute(
+        """
+        INSERT INTO posts (media_ids, description, status, published_at)
+        VALUES ($1, $2, 'published', NOW())
+        """,
+        media_id,
+        description,
     )
