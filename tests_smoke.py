@@ -5,6 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
+from keyboards import main_menu
 from scheduler.post_scheduler import next_publication_slot
 from scheduler.post_scheduler import TEST_DUPLICATE_DELAY, TEST_QUEUE_INTERVAL, duplicate_delay, queue_slot_interval
 from utils.pricing import (
@@ -76,6 +77,16 @@ async def test_video_chunks() -> None:
     ]
 
 
+def test_main_menus() -> None:
+    """Проверяет доступность создания поста и панелей для административных ролей."""
+    def button_texts(role: str) -> list[str]:
+        return [button.text for row in main_menu(role, "ru").keyboard for button in row]
+
+    assert button_texts("user") == ["Создать пост"]
+    assert button_texts("admin") == ["Создать пост", "Админ-панель"]
+    assert button_texts("super_admin") == ["Создать пост", "Админ-панель", "Супер админ панель"]
+
+
 def test_prices_text_and_slots() -> None:
     """Проверяет обе формулы, обязательную шапку/подвал и временные границы."""
     assert convert_aed_to_usd(Decimal("366"), ENGINE_MARKUP) == 110
@@ -121,6 +132,7 @@ def test_prices_text_and_slots() -> None:
 
 
 if __name__ == "__main__":
+    test_main_menus()
     test_prices_text_and_slots()
     asyncio.run(test_video_chunks())
     print("Smoke checks passed.")

@@ -24,6 +24,8 @@ def main_menu(role: str, language_code: str) -> ReplyKeyboardMarkup:
     buttons = [[KeyboardButton(text=t(language_code, "create_post"))]]
     if role != "user":
         buttons.append([KeyboardButton(text=t(language_code, "admin_panel"))])
+    if role == "super_admin":
+        buttons.append([KeyboardButton(text=t(language_code, "super_admin_panel"))])
 
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
