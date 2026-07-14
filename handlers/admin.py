@@ -1,11 +1,23 @@
 """Небольшие обработчики административного меню."""
 
+import csv
+import io
+from datetime import datetime
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message
+from aiogram.types import BufferedInputFile, Message
 
-from database import get_user_by_shop_name, get_user_language, get_user_role, set_user_admin, set_user_trusted_seller
+from database import (
+    get_all_users,
+    get_queue_statistics,
+    get_user_by_shop_name,
+    get_user_language,
+    get_user_role,
+    set_user_admin,
+    set_user_trusted_seller,
+)
 from keyboards import cancel_keyboard, main_menu, super_admin_menu_keyboard
 from locales import SUPPORTED_LANGUAGE_CODES, t
 from roles import get_role_from_db_or_config, is_admin, is_super_admin
@@ -206,3 +218,79 @@ async def reject_non_text_telegram_id(message: Message, state: FSMContext) -> No
     data = await state.get_data()
     language_code = data.get("language_code", "ru")
     await message.answer(t(language_code, "enter_telegram_id_for_admin"))
+
+
+@router.callback_query(F.data == "super_admin:view_queue")
+async def view_queue_status(callback_query: Message) -> None:
+    """Показывает статистику по очереди публикаций."""
+    if callback_query.from_user is None:
+        return
+    
+    if not is_super_admin(callback_query.from_user.id):
+        await callback_query.answer(t("ru", "access_denied"), show_alert=True)
+        return
+    
+    language_code = await get_user_language(callback_query.from_user.id)
+    if language_code not in SUPPORTED_LANGUAGE_CODES:
+        language_code = "ru"
+    
+    stats = await get_queue_statistics()
+    
+    if stats["total"] == 0:
+        message_text = t(language_code, "queue_empty")
+    else:
+        message_text = t(language_code, "queue_status").format(
+            total=stats["total"],
+            queued=stats["queued"],
+            published=stats["published"],
+            waiting_duplicate=stats["waiting_duplicate"],
+        )
+    
+    if callback_query.message is not None:
+        await callback_query.answer()
+        await callback_query.message.answer(message_text)
+
+
+@router.callback_query(F.data == "super_admin:export_users")
+async def export_users_table(callback_query: Message) -> None:
+    """Выгружает таблицу users в CSV-файл."""
+    if callback_query.from_user is None:
+        return
+    
+    if not is_super_admin(callback_query.from_user.id):
+        await callback_query.answer(t("ru", "access_denied"), show_alert=True)
+        return
+    
+    language_code = await get_user_language(callback_query.from_user.id)
+    if language_code not in SUPPORTED_LANGUAGE_CODES:
+        language_code = "ru"
+    
+    users = await get_all_users()
+    
+    if not users:
+        if callback_query.message is not None:
+            await callback_query.answer()
+            await callback_query.message.answer("База пользователей пуста.")
+        return
+    
+    # Создаём CSV в памяти
+    output = io.StringIO()
+    writer = csv.DictWriter(
+        output,
+        fieldnames=["telegram_id", "role", "language_code", "phone_number", "shop_name", "created_at"],
+        extrasaction="ignore",
+    )
+    writer.writeheader()
+    for user in users:
+        writer.writerow(user)
+    
+    csv_bytes = output.getvalue().encode("utf-8-sig")  # BOM для Excel
+    output.close()
+    
+    filename = f"users_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+    file = BufferedInputFile(csv_bytes, filename=filename)
+    
+    if callback_query.message is not None:
+        await callback_query.answer()
+        await callback_query.message.answer(t(language_code, "users_export_header"))
+        await callback_query.message.answer_document(file)

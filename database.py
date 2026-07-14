@@ -553,3 +553,43 @@ async def get_all_admins() -> list[tuple[int, str, str | None]]:
         """
     )
     return [(r["telegram_id"], r["role"], r["shop_name"]) for r in records]
+
+
+async def get_queue_statistics() -> dict[str, int]:
+    """Возвращает статистику по очереди постов."""
+    record = await _get_pool().fetchrow(
+        """
+        SELECT 
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE status = 'queued') as queued,
+            COUNT(*) FILTER (WHERE status = 'published') as published,
+            COUNT(*) FILTER (WHERE status = 'waiting_for_duplicate') as waiting_duplicate
+        FROM post_queue
+        """
+    )
+    if record is None:
+        return {"total": 0, "queued": 0, "published": 0, "waiting_duplicate": 0}
+    return {
+        "total": record["total"],
+        "queued": record["queued"],
+        "published": record["published"],
+        "waiting_duplicate": record["waiting_duplicate"],
+    }
+
+
+async def get_all_users() -> list[dict[str, Any]]:
+    """Возвращает всех зарегистрированных пользователей для экспорта."""
+    records = await _get_pool().fetch(
+        """
+        SELECT 
+            telegram_id, 
+            role, 
+            language_code, 
+            phone_number, 
+            shop_name, 
+            created_at
+        FROM users
+        ORDER BY created_at DESC
+        """
+    )
+    return [dict(r) for r in records]

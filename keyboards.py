@@ -108,5 +108,7 @@ def super_admin_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text=t(language_code, "set_trusted_seller"), callback_data="super_admin:set_trusted")],
             [InlineKeyboardButton(text=t(language_code, "set_admin"), callback_data="super_admin:set_admin")],
+            [InlineKeyboardButton(text=t(language_code, "view_queue"), callback_data="super_admin:view_queue")],
+            [InlineKeyboardButton(text=t(language_code, "export_users"), callback_data="super_admin:export_users")],
         ]
     )

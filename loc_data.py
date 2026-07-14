@@ -69,6 +69,11 @@ RU_TEXTS = {
     "enter_telegram_id_for_admin": "Введите Telegram ID пользователя для назначения роли администратора:",
     "admin_assigned": "✅ Пользователю {telegram_id} назначена роль администратора. Теперь он может модерировать посты.",
     "user_not_found": "Пользователь с таким Telegram ID не найден в базе данных. Пользователь должен сначала пройти регистрацию через /start.",
+    "view_queue": "📋 Просмотр очереди",
+    "export_users": "📊 Выгрузить users",
+    "queue_status": "📊 **Статус очереди публикаций**\n\n📝 Всего постов в очереди: {total}\n⏳ Ожидают публикации: {queued}\n✅ Опубликованы: {published}\n🔄 Ожидают дубликата: {waiting_duplicate}",
+    "queue_empty": "Очередь пуста. Все посты опубликованы.",
+    "users_export_header": "📊 **Экспорт таблицы users**\n\nФайл содержит всех зарегистрированных пользователей.",
     "info_message": """🤖 **О боте KPP Motors**
 
 Этот бот помогает продавцам автозапчастей публиковать товары в канале.
@@ -160,6 +165,11 @@ EN_TEXTS = {
     "enter_telegram_id_for_admin": "Enter the user's Telegram ID to assign administrator role:",
     "admin_assigned": "✅ User {telegram_id} has been assigned the administrator role. They can now moderate posts.",
     "user_not_found": "User with this Telegram ID not found in the database. The user must complete registration via /start first.",
+    "view_queue": "📋 View queue",
+    "export_users": "📊 Export users",
+    "queue_status": "📊 **Publication queue status**\n\n📝 Total posts in queue: {total}\n⏳ Awaiting publication: {queued}\n✅ Published: {published}\n🔄 Awaiting duplicate: {waiting_duplicate}",
+    "queue_empty": "Queue is empty. All posts have been published.",
+    "users_export_header": "📊 **Users table export**\n\nFile contains all registered users.",
     "info_message": """🤖 **About KPP Motors Bot**
 
 This bot helps auto parts sellers publish products to the channel.
