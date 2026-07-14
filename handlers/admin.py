@@ -26,6 +26,10 @@ from roles import get_role_from_db_or_config, is_admin, is_super_admin
 router = Router(name=__name__)
 ADMIN_MENU_TEXTS = frozenset({"Админ-панель", "Admin panel", "لوحة الإدارة"})
 SUPER_ADMIN_MENU_TEXTS = frozenset({"Супер админ панель", "Super admin panel", "لوحة المدير العام"})
+SET_TRUSTED_SELLER_TEXTS = frozenset({"🌟 Назначить доверенного продавца", "🌟 Assign trusted seller"})
+SET_ADMIN_TEXTS = frozenset({"👤 Назначить администратора", "👤 Assign administrator"})
+VIEW_QUEUE_TEXTS = frozenset({"📋 Просмотр очереди", "📋 View queue"})
+EXPORT_USERS_TEXTS = frozenset({"📊 Выгрузить users", "📊 Export users"})
 
 
 class TrustedSellerAssignment(StatesGroup):
@@ -80,17 +84,17 @@ async def open_super_admin_panel(message: Message) -> None:
     )
 
 
-@router.callback_query(F.data == "super_admin:set_trusted")
-async def start_trusted_seller_assignment(callback_query: Message, state: FSMContext) -> None:
+@router.message(F.text.in_(SET_TRUSTED_SELLER_TEXTS))
+async def start_trusted_seller_assignment(message: Message, state: FSMContext) -> None:
     """Начинает процесс назначения доверенного продавца."""
-    if callback_query.from_user is None:
+    if message.from_user is None:
         return
     
-    if not is_super_admin(callback_query.from_user.id):
-        await callback_query.answer(t("ru", "access_denied"), show_alert=True)
+    if not is_super_admin(message.from_user.id):
+        await message.answer(t("ru", "access_denied"))
         return
     
-    language_code = await get_user_language(callback_query.from_user.id)
+    language_code = await get_user_language(message.from_user.id)
     if language_code not in SUPPORTED_LANGUAGE_CODES:
         language_code = "ru"
     
@@ -98,12 +102,10 @@ async def start_trusted_seller_assignment(callback_query: Message, state: FSMCon
     await state.set_state(TrustedSellerAssignment.waiting_for_shop_name)
     await state.update_data(language_code=language_code)
     
-    if callback_query.message is not None:
-        await callback_query.answer()
-        await callback_query.message.answer(
-            t(language_code, "enter_shop_name_for_trust"),
-            reply_markup=cancel_keyboard(language_code),
-        )
+    await message.answer(
+        t(language_code, "enter_shop_name_for_trust"),
+        reply_markup=cancel_keyboard(language_code),
+    )
 
 
 @router.message(TrustedSellerAssignment.waiting_for_shop_name, F.text)
@@ -146,17 +148,17 @@ async def reject_non_text_shop_name(message: Message, state: FSMContext) -> None
     await message.answer(t(language_code, "enter_shop_name_for_trust"))
 
 
-@router.callback_query(F.data == "super_admin:set_admin")
-async def start_admin_assignment(callback_query: Message, state: FSMContext) -> None:
+@router.message(F.text.in_(SET_ADMIN_TEXTS))
+async def start_admin_assignment(message: Message, state: FSMContext) -> None:
     """Начинает процесс назначения администратора."""
-    if callback_query.from_user is None:
+    if message.from_user is None:
         return
     
-    if not is_super_admin(callback_query.from_user.id):
-        await callback_query.answer(t("ru", "access_denied"), show_alert=True)
+    if not is_super_admin(message.from_user.id):
+        await message.answer(t("ru", "access_denied"))
         return
     
-    language_code = await get_user_language(callback_query.from_user.id)
+    language_code = await get_user_language(message.from_user.id)
     if language_code not in SUPPORTED_LANGUAGE_CODES:
         language_code = "ru"
     
@@ -164,12 +166,10 @@ async def start_admin_assignment(callback_query: Message, state: FSMContext) -> 
     await state.set_state(AdminAssignment.waiting_for_telegram_id)
     await state.update_data(language_code=language_code)
     
-    if callback_query.message is not None:
-        await callback_query.answer()
-        await callback_query.message.answer(
-            t(language_code, "enter_telegram_id_for_admin"),
-            reply_markup=cancel_keyboard(language_code),
-        )
+    await message.answer(
+        t(language_code, "enter_telegram_id_for_admin"),
+        reply_markup=cancel_keyboard(language_code),
+    )
 
 
 @router.message(AdminAssignment.waiting_for_telegram_id, F.text)
@@ -220,17 +220,17 @@ async def reject_non_text_telegram_id(message: Message, state: FSMContext) -> No
     await message.answer(t(language_code, "enter_telegram_id_for_admin"))
 
 
-@router.callback_query(F.data == "super_admin:view_queue")
-async def view_queue_status(callback_query: Message) -> None:
+@router.message(F.text.in_(VIEW_QUEUE_TEXTS))
+async def view_queue_status(message: Message) -> None:
     """Показывает статистику по очереди публикаций."""
-    if callback_query.from_user is None:
+    if message.from_user is None:
         return
     
-    if not is_super_admin(callback_query.from_user.id):
-        await callback_query.answer(t("ru", "access_denied"), show_alert=True)
+    if not is_super_admin(message.from_user.id):
+        await message.answer(t("ru", "access_denied"))
         return
     
-    language_code = await get_user_language(callback_query.from_user.id)
+    language_code = await get_user_language(message.from_user.id)
     if language_code not in SUPPORTED_LANGUAGE_CODES:
         language_code = "ru"
     
@@ -246,31 +246,27 @@ async def view_queue_status(callback_query: Message) -> None:
             waiting_duplicate=stats["waiting_duplicate"],
         )
     
-    if callback_query.message is not None:
-        await callback_query.answer()
-        await callback_query.message.answer(message_text)
+    await message.answer(message_text)
 
 
-@router.callback_query(F.data == "super_admin:export_users")
-async def export_users_table(callback_query: Message) -> None:
+@router.message(F.text.in_(EXPORT_USERS_TEXTS))
+async def export_users_table(message: Message) -> None:
     """Выгружает таблицу users в CSV-файл."""
-    if callback_query.from_user is None:
+    if message.from_user is None:
         return
     
-    if not is_super_admin(callback_query.from_user.id):
-        await callback_query.answer(t("ru", "access_denied"), show_alert=True)
+    if not is_super_admin(message.from_user.id):
+        await message.answer(t("ru", "access_denied"))
         return
     
-    language_code = await get_user_language(callback_query.from_user.id)
+    language_code = await get_user_language(message.from_user.id)
     if language_code not in SUPPORTED_LANGUAGE_CODES:
         language_code = "ru"
     
     users = await get_all_users()
     
     if not users:
-        if callback_query.message is not None:
-            await callback_query.answer()
-            await callback_query.message.answer("База пользователей пуста.")
+        await message.answer("База пользователей пуста.")
         return
     
     # Создаём CSV в памяти
@@ -290,7 +286,5 @@ async def export_users_table(callback_query: Message) -> None:
     filename = f"users_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
     file = BufferedInputFile(csv_bytes, filename=filename)
     
-    if callback_query.message is not None:
-        await callback_query.answer()
-        await callback_query.message.answer(t(language_code, "users_export_header"))
-        await callback_query.message.answer_document(file)
+    await message.answer(t(language_code, "users_export_header"))
+    await message.answer_document(file)

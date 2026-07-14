@@ -27,10 +27,17 @@ LANGUAGE_KEYBOARD = InlineKeyboardMarkup(
 def main_menu(role: str, language_code: str) -> ReplyKeyboardMarkup:
     """Создает главное Reply-меню с учетом языка и роли пользователя."""
     buttons = [[KeyboardButton(text=t(language_code, "create_post"))]]
-    if role != "user" and role != "trusted_seller":
-        buttons.append([KeyboardButton(text=t(language_code, "admin_panel"))])
+    
+    # Для супер-админа добавляем все функции прямо в главное меню
     if role == "super_admin":
-        buttons.append([KeyboardButton(text=t(language_code, "super_admin_panel"))])
+        buttons.append([
+            KeyboardButton(text=t(language_code, "set_trusted_seller")),
+            KeyboardButton(text=t(language_code, "set_admin")),
+        ])
+        buttons.append([
+            KeyboardButton(text=t(language_code, "view_queue")),
+            KeyboardButton(text=t(language_code, "export_users")),
+        ])
 
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 

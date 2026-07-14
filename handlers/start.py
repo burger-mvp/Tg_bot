@@ -79,12 +79,15 @@ async def command_start(message: Message, state: FSMContext) -> None:
         await message.answer(t("ru", "choose_language"), reply_markup=LANGUAGE_KEYBOARD)
         return
 
-    role = await get_role_from_db_or_config(telegram_id)
-    await update_user_role(telegram_id, role)
+    # Проверяем, есть ли телефон (зарегистрирован ли пользователь)
     if not await get_user_phone_number(telegram_id):
+        # Пользователь не завершил регистрацию, запрашиваем контакт
         await request_phone_number(message, state, language_code)
         return
 
+    # Пользователь уже зарегистрирован, обновляем роль и показываем меню
+    role = await get_role_from_db_or_config(telegram_id)
+    await update_user_role(telegram_id, role)
     await show_welcome(message, role, language_code)
 
 
