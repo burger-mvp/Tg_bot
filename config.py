@@ -50,6 +50,11 @@ try:
 except ValueError as error:
     raise RuntimeError("CHANNEL_ID должен быть целым числом.") from error
 
+try:
+    TEST_CHANNEL_ID = int(os.getenv("TEST_CHANNEL_ID", str(CHANNEL_ID)))
+except ValueError as error:
+    raise RuntimeError("TEST_CHANNEL_ID должен быть целым числом.") from error
+
 SUPER_ADMIN_IDS = _parse_admin_ids(_required_value("SUPER_ADMIN_IDS"))
 ADMIN_IDS = _parse_admin_ids(_required_value("ADMIN_IDS"))
 TEST_MODE = _parse_bool("TEST_MODE")

@@ -12,7 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
-from config import TELEGRAM_API_SERVER_URL
+from config import TELEGRAM_API_SERVER_URL, TEST_MODE
 from roles import super_admin_ids
 from database import (
     approve_post,
@@ -164,8 +164,8 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
     shop_name = await get_user_shop_name(message.from_user.id) or ""
     post_text = format_post_text(description, post_kind, price_data, seller_name=shop_name, language_code=language_code)
     post_id = uuid4()
-    # Доверенные продавцы и администраторы публикуются без модерации
-    status = "queued" if role in ("admin", "super_admin", "trusted_seller") else "pending_moderation"
+    # В тестовом режиме модерацию обходим, чтобы можно было быстро проверять публикации.
+    status = "queued" if TEST_MODE or role in ("admin", "super_admin", "trusted_seller") else "pending_moderation"
     try:
         await create_post(
             post_id=post_id,

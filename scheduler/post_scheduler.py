@@ -11,7 +11,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from config import CHANNEL_ID, SCHEDULER_TIMEZONE, TEST_MODE
+from config import CHANNEL_ID, SCHEDULER_TIMEZONE, TEST_CHANNEL_ID, TEST_MODE
 from database import (
     claim_next_queued_post,
     claim_post_for_duplicate,
@@ -34,6 +34,11 @@ DUPLICATE_RETRY_DELAY = timedelta(minutes=5)
 TEST_QUEUE_INTERVAL = timedelta(minutes=1)
 PRODUCTION_DUPLICATE_DELAY = timedelta(days=7)
 TEST_DUPLICATE_DELAY = timedelta(minutes=3)
+
+
+def publication_channel_id() -> int:
+    """Возвращает канал публикации с учетом тестового режима."""
+    return TEST_CHANNEL_ID if TEST_MODE else CHANNEL_ID
 
 
 def queue_slot_interval() -> timedelta:
@@ -131,7 +136,7 @@ class PostScheduler:
         if post is None:
             return
         try:
-            await send_queued_post(self._bot, CHANNEL_ID, post)
+            await send_queued_post(self._bot, publication_channel_id(), post)
         except TelegramAPIError as error:
             logger.exception("Не удалось опубликовать пост %s в канале: %s", post.id, error)
             await mark_publication_failed(post.id, str(error), next_publication_slot(now + queue_slot_interval()))
@@ -158,7 +163,7 @@ class PostScheduler:
         if post is None:
             return
         try:
-            await send_queued_post(self._bot, CHANNEL_ID, post)
+            await send_queued_post(self._bot, publication_channel_id(), post)
         except TelegramAPIError as error:
             logger.exception("Не удалось повторно опубликовать пост %s: %s", post.id, error)
             await mark_duplicate_failed(post.id, str(error))
