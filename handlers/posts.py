@@ -258,6 +258,24 @@ async def start_post_creation(message: Message, state: FSMContext) -> None:
     await message.answer(t(language_code, "send_media"), reply_markup=media_step_keyboard(language_code))
 
 
+@router.message(PostCreation.waiting_for_media, F.text.in_(MEDIA_DONE_TEXTS))
+async def finish_media_collection(message: Message, state: FSMContext) -> None:
+    """Завершает ручной сбор медиа и показывает выбор категории."""
+    if message.from_user is None:
+        return
+    language_code = normalize_language_code((await state.get_data()).get("language_code"))
+    media_items = (await state.get_data()).get("media_items")
+    if not isinstance(media_items, list) or not media_items:
+        # Пользователь нажал кнопку, но не загрузил медиа — остаёмся в том же состоянии.
+        await message.answer(
+            t(language_code, "no_media"),
+            reply_markup=media_step_keyboard(language_code),
+        )
+        return
+    await state.set_state(PostCreation.waiting_for_category)
+    await message.answer(t(language_code, "choose_category"), reply_markup=category_keyboard(language_code))
+
+
 @router.message(PostCreation.waiting_for_media, F.video)
 async def collect_video(message: Message, state: FSMContext) -> None:
     """Добавляет каждое видео, включая элементы Telegram-альбомов, в FSM-список."""
@@ -319,24 +337,6 @@ async def explain_media_outside_post_creation(message: Message, state: FSMContex
         await message.answer(t(language_code, "media_outside_post_creation"))
         return
     await message.answer(t(language_code, "media_not_expected"))
-
-
-@router.message(PostCreation.waiting_for_media, F.text.in_(MEDIA_DONE_TEXTS))
-async def finish_media_collection(message: Message, state: FSMContext) -> None:
-    """Завершает ручной сбор медиа и показывает выбор категории."""
-    if message.from_user is None:
-        return
-    language_code = normalize_language_code((await state.get_data()).get("language_code"))
-    media_items = (await state.get_data()).get("media_items")
-    if not isinstance(media_items, list) or not media_items:
-        # Пользователь нажал кнопку, но не загрузил медиа — остаёмся в том же состоянии
-        await message.answer(
-            t(language_code, "no_media"),
-            reply_markup=media_step_keyboard(language_code)
-        )
-        return
-    await state.set_state(PostCreation.waiting_for_category)
-    await message.answer(t(language_code, "choose_category"), reply_markup=category_keyboard(language_code))
 
 
 @router.callback_query(PostCreation.waiting_for_category, F.data == "post:category:engine")
