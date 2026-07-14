@@ -215,7 +215,7 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
                     post,
                     text_reply_markup=moderation_keyboard(str(post_id), language_code),
                 )
-                moderation_message = moderation_messages[0]
+                moderation_message = moderation_messages[-1]
                 await set_moderation_message(post_id, moderation_message.chat.id, moderation_message.message_id)
             except TelegramAPIError:
                 logger.exception("Не удалось отправить модерацию админу %s", admin_id)
@@ -552,23 +552,45 @@ async def _require_super_admin(callback: CallbackQuery) -> bool:
 @router.callback_query(F.data.startswith("moderation:approve:"))
 async def approve_moderated_post(callback: CallbackQuery) -> None:
     """Одобряет пост обычного пользователя и переносит его в очередь."""
-    if not await _require_super_admin(callback):
-        return
-    post_id = _post_id_from_callback(callback, "approve")
-    if post_id is None:
-        await callback.answer(t("ru", "already_moderated"), show_alert=True)
-        return
-    post = await approve_post(post_id, next_publication_slot())
-    if post is None:
-        await callback.answer(t("ru", "already_moderated"), show_alert=True)
-        return
-    await callback.answer(t(post.language_code, "moderation_approved"))
-    if callback.message is not None:
-        try:
-            await callback.message.edit_reply_markup(reply_markup=None)
-        except TelegramBadRequest:
-            pass
-        await callback.message.answer(t(post.language_code, "moderation_approved"))
+    answered = False
+    post_id: UUID | None = None
+    try:
+        if not await _require_super_admin(callback):
+            answered = True
+            return
+        post_id = _post_id_from_callback(callback, "approve")
+        if post_id is None:
+            await callback.answer(t("ru", "already_moderated"), show_alert=True)
+            answered = True
+            return
+        post = await approve_post(post_id, next_publication_slot())
+        if post is None:
+            await callback.answer(t("ru", "already_moderated"), show_alert=True)
+            answered = True
+            return
+        await callback.answer(t(post.language_code, "moderation_approved"))
+        answered = True
+        if callback.message is not None:
+            try:
+                await callback.message.edit_reply_markup(reply_markup=None)
+            except TelegramBadRequest:
+                pass
+            await callback.message.answer(t(post.language_code, "moderation_approved"))
+    except Exception as error:
+        logger.exception("Не удалось одобрить пост по callback %s", callback.data)
+        language_code = "ru"
+        if post_id is not None:
+            failed_post = await get_post(post_id)
+            if failed_post is not None:
+                language_code = failed_post.language_code
+        if not answered:
+            await callback.answer(t(language_code, "moderation_approve_failed"), show_alert=True)
+            answered = True
+        if callback.message is not None:
+            await callback.message.answer(t(language_code, "moderation_approve_failed_detail", error=error))
+    finally:
+        if not answered:
+            await callback.answer()
 
 
 @router.callback_query(F.data.startswith("moderation:reject:"))
@@ -663,31 +685,46 @@ async def save_moderation_edit(message: Message, state: FSMContext, bot: Bot) ->
         await message.answer(t(language_code, "already_moderated"))
         return
     try:
-        # Отправляем обновленный пост на модерацию только супер-админам
-        for admin_id in super_admin_ids():
+        # Сразу показываем обновленный пост админу, который редактировал описание.
+        await message.answer(t(updated_post.language_code, "post_updated"))
+        moderation_messages = await send_queued_post(
+            bot,
+            message.chat.id,
+            updated_post,
+            text_reply_markup=moderation_keyboard(str(updated_post.id), updated_post.language_code),
+        )
+        moderation_message = moderation_messages[-1]
+        await set_moderation_message(
+            updated_post.id,
+            moderation_message.chat.id,
+            moderation_message.message_id,
+        )
+
+        # Остальным супер-админам тоже отправляем обновленную версию.
+        for admin_id in super_admin_ids() - {message.chat.id}:
             try:
                 await bot.send_message(
                     admin_id,
                     t(updated_post.language_code, "moderation_request", author_id=updated_post.author_telegram_id),
                 )
-                moderation_messages = await send_queued_post(
+                other_messages = await send_queued_post(
                     bot,
                     admin_id,
                     updated_post,
                     text_reply_markup=moderation_keyboard(str(updated_post.id), updated_post.language_code),
                 )
-                moderation_message = moderation_messages[0]
+                other_message = other_messages[-1]
                 await set_moderation_message(
                     updated_post.id,
-                    moderation_message.chat.id,
-                    moderation_message.message_id,
+                    other_message.chat.id,
+                    other_message.message_id,
                 )
             except TelegramAPIError:
                 logger.exception("Не удалось отправить обновленную модерацию админу %s", admin_id)
     except Exception:
+        logger.exception("Не удалось повторно отправить обновленный пост %s на модерацию", updated_post.id)
         await message.answer(t(language_code, "moderation_delivery_failed"))
         return
-    await message.answer(t(updated_post.language_code, "post_updated"))
 
 
 @router.message(ModerationEdit.waiting_for_description)

@@ -292,20 +292,20 @@ async def approve_post(post_id: UUID, scheduled_at: datetime) -> QueuedPost | No
     """Переводит ожидающий модерации пост в очередь публикаций."""
     record = await _get_pool().fetchrow(
         """
-        UPDATE post_queue
-        SET status = 'queued',
-            approved_at = NOW(),
-            scheduled_at = $2,
-            updated_at = NOW(),
-            last_error = NULL
-        WHERE id = $1
-          AND status = 'pending_moderation'
-        RETURNING (
-            SELECT row(pq.*, u.shop_name)
-            FROM post_queue pq
-            JOIN users u ON u.telegram_id = pq.author_telegram_id
-            WHERE pq.id = post_queue.id
-        ).*
+        WITH updated AS (
+            UPDATE post_queue
+            SET status = 'queued',
+                approved_at = NOW(),
+                scheduled_at = $2,
+                updated_at = NOW(),
+                last_error = NULL
+            WHERE id = $1
+              AND status = 'pending_moderation'
+            RETURNING *
+        )
+        SELECT updated.*, u.shop_name AS author_shop_name
+        FROM updated
+        JOIN users u ON u.telegram_id = updated.author_telegram_id
         """,
         post_id,
         scheduled_at,
@@ -317,18 +317,18 @@ async def update_pending_post_text(post_id: UUID, description: str, post_text: s
     """Сохраняет исправленное описание поста до его одобрения."""
     record = await _get_pool().fetchrow(
         """
-        UPDATE post_queue
-        SET description = $2,
-            post_text = $3,
-            updated_at = NOW()
-        WHERE id = $1
-          AND status = 'pending_moderation'
-        RETURNING (
-            SELECT row(pq.*, u.shop_name)
-            FROM post_queue pq
-            JOIN users u ON u.telegram_id = pq.author_telegram_id
-            WHERE pq.id = post_queue.id
-        ).*
+        WITH updated AS (
+            UPDATE post_queue
+            SET description = $2,
+                post_text = $3,
+                updated_at = NOW()
+            WHERE id = $1
+              AND status = 'pending_moderation'
+            RETURNING *
+        )
+        SELECT updated.*, u.shop_name AS author_shop_name
+        FROM updated
+        JOIN users u ON u.telegram_id = updated.author_telegram_id
         """,
         post_id,
         description,
@@ -593,11 +593,12 @@ async def get_queue_statistics() -> dict[str, int]:
     )
     if record is None:
         return {"total": 0, "queued": 0, "published": 0, "waiting_duplicate": 0}
+    record_data = dict(record)
     return {
-        "total": record["total"],
-        "queued": record["queued"],
-        "published": record["published"],
-        "waiting_duplicate": record["waiting_duplicate"],
+        "total": int(record_data.get("total") or 0),
+        "queued": int(record_data.get("queued") or 0),
+        "published": int(record_data.get("published") or 0),
+        "waiting_duplicate": int(record_data.get("waiting_duplicate") or 0),
     }
 
 
