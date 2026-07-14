@@ -1,7 +1,7 @@
 """Расчет цен и сборка неизменяемого текста публикации."""
 
 import math
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation
 from typing import Any, Final
 
 
@@ -49,9 +49,9 @@ Our YouTube channel: https://www.youtube.com/@KppMotors
 Seller: {seller_name}"""
 
 
-def round_price_up_to_tens(price: Decimal) -> Decimal:
-    """Округляет цену вверх до ближайшего десятка для красивого отображения."""
-    return Decimal(math.ceil(float(price) / 10) * 10)
+def round_price_up_to_tens(price: Decimal) -> int:
+    """Округляет итоговую цену вверх до ближайшего десятка для красивого отображения."""
+    return math.ceil(float(price) / 10) * 10
 
 
 def parse_aed_price(raw_price: str) -> Decimal:
@@ -64,8 +64,7 @@ def parse_aed_price(raw_price: str) -> Decimal:
         raise ValueError("Цена не является числом") from error
     if not price.is_finite() or price <= 0:
         raise ValueError("Цена должна быть положительной")
-    # Округляем цену вверх до десятков
-    return round_price_up_to_tens(price)
+    return price
 
 
 def _telegram_length(text: str) -> int:
@@ -87,8 +86,9 @@ def _truncate_for_telegram(text: str, max_length: int) -> str:
 
 
 def convert_aed_to_usd(aed_price: Decimal, markup: Decimal) -> int:
-    """Конвертирует AED в USD с заданной наценкой и округлением до целого."""
-    return int(((aed_price / AED_PER_USD) * markup).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    """Конвертирует AED в USD с наценкой и округляет итог вверх до десятков."""
+    final_price = (aed_price / AED_PER_USD) * markup
+    return round_price_up_to_tens(final_price)
 
 
 def serialize_price(aed_price: Decimal, markup: Decimal) -> dict[str, int | str]:

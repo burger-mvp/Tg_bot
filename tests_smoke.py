@@ -131,6 +131,8 @@ def test_main_menus_and_localization() -> None:
     assert start_keyboard("ru").keyboard[0][0].text == "🚀 Начать"
     assert t("ru", "engine") == "Двигатель / ДВС"
     assert t("ru", "engine_with_transmission") == "Двигатель с КПП"
+    queue_status = t("ru", "queue_status", total=0, queued=0, published=0, waiting_duplicate=0)
+    assert "Всего постов в очереди: 0" in queue_status
     for language_code in ("en", "fa", "ur", "hi", "bn"):
         assert t(language_code, "engine") == "Engine"
         assert t(language_code, "engine_with_transmission") == "Engine with Gearbox"
@@ -139,7 +141,9 @@ def test_main_menus_and_localization() -> None:
 def test_prices_text_and_slots() -> None:
     """Проверяет обе формулы, обязательную шапку/подвал и временные границы."""
     assert convert_aed_to_usd(Decimal("366"), ENGINE_MARKUP) == 110
-    assert convert_aed_to_usd(Decimal("366"), BODY_MARKUP) == 115
+    assert convert_aed_to_usd(Decimal("366"), BODY_MARKUP) == 120
+    assert convert_aed_to_usd(Decimal("1998"), ENGINE_MARKUP) == 610
+    assert convert_aed_to_usd(Decimal("1628"), BODY_MARKUP) == 520
 
     text = format_post_text(
         "Описание",
@@ -164,8 +168,8 @@ def test_prices_text_and_slots() -> None:
     assert "Engine with Gearbox price: $220 USD" in english_text
 
     assert parse_aed_price("15000") == Decimal("15000")
-    assert parse_aed_price("199") == Decimal("200")
-    assert parse_aed_price("102") == Decimal("110")
+    assert parse_aed_price("199") == Decimal("199")
+    assert parse_aed_price("102") == Decimal("102")
     for invalid_price in ("15000 ", "10к", "12500.50", "0"):
         try:
             parse_aed_price(invalid_price)

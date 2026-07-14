@@ -218,17 +218,19 @@ async def view_queue_status(message: Message, state: FSMContext) -> None:
 
         stats = await get_queue_statistics()
         queued_posts = await get_queued_posts()
-        total = stats.get("total", 0)
+        total_posts = stats.get("total", 0)
         queued = stats.get("queued", 0)
         published = stats.get("published", 0)
         waiting_duplicate = stats.get("waiting_duplicate", 0)
 
-        if not queued_posts and queued == 0:
+        if total_posts == 0 or (not queued_posts and queued == 0):
             await message.answer(t(language_code, "publication_queue_empty"))
             return
 
-        message_text = t(language_code, "queue_status").format(
-            total=total,
+        message_text = t(
+            language_code,
+            "queue_status",
+            total=total_posts,
             queued=queued,
             published=published,
             waiting_duplicate=waiting_duplicate,
