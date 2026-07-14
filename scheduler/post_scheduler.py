@@ -13,6 +13,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from config import CHANNEL_ID, SCHEDULER_TIMEZONE, TEST_CHANNEL_ID, TEST_MODE
 from database import (
+    accelerate_queue_for_test_mode,
     claim_next_queued_post,
     claim_post_for_duplicate,
     delete_duplicated_post,
@@ -87,6 +88,12 @@ class PostScheduler:
         """Восстанавливает повторы после рестарта и запускает проверку слотов."""
         await recover_interrupted_posts(next_publication_slot())
         await recover_interrupted_duplicates()
+        if TEST_MODE:
+            now = datetime.now(SCHEDULER_TIMEZONE)
+            await accelerate_queue_for_test_mode(
+                next_publication_slot(now),
+                now + duplicate_delay(),
+            )
         if TEST_MODE:
             self._scheduler.add_job(
                 self.publish_next_post,

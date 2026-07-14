@@ -421,6 +421,31 @@ async def get_posts_waiting_for_duplicate() -> list[tuple[UUID, datetime]]:
     return [(row["id"], row["duplicate_due_at"]) for row in rows]
 
 
+async def accelerate_queue_for_test_mode(scheduled_at: datetime, duplicate_due_at: datetime) -> None:
+    """Переводит уже накопленные посты на короткие тестовые сроки после включения TEST_MODE."""
+    await _get_pool().execute(
+        """
+        UPDATE post_queue
+        SET scheduled_at = LEAST(COALESCE(scheduled_at, $1), $1),
+            updated_at = NOW(),
+            last_error = NULL
+        WHERE status = 'queued'
+        """,
+        scheduled_at,
+    )
+    await _get_pool().execute(
+        """
+        UPDATE post_queue
+        SET duplicate_due_at = LEAST(COALESCE(duplicate_due_at, $1), $1),
+            updated_at = NOW(),
+            last_error = NULL
+        WHERE status = 'published'
+          AND duplicate_due_at IS NOT NULL
+        """,
+        duplicate_due_at,
+    )
+
+
 async def recover_interrupted_posts(scheduled_at: datetime) -> None:
     """Возвращает в очередь посты, прерванные перезапуском до отметки об успехе."""
     await _get_pool().execute(
