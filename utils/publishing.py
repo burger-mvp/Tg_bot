@@ -25,11 +25,12 @@ async def send_post_content(
     media_buffer: list[dict[str, str]] = []
     caption = post_text
     caption_sent = False
+    media_group_sent = False
     caption_message: Message | None = None
 
     async def send_media_chunk() -> None:
         """Отправляет накопленные медиа: одиночное или альбом до 10 элементов."""
-        nonlocal caption_message, caption_sent
+        nonlocal caption_message, caption_sent, media_group_sent
         if not media_buffer:
             return
         chunk = media_buffer.copy()
@@ -65,6 +66,7 @@ async def send_post_content(
             if not caption_sent:
                 caption_message = message
         else:
+            media_group_sent = True
             media_group = []
             for index, item in enumerate(chunk):
                 item_type = item.get("type", "video")
@@ -110,12 +112,13 @@ async def send_post_content(
             caption_sent = True
 
     await send_media_chunk()
-    if text_reply_markup is not None and caption_message is not None and len(sent_messages) > 1:
-        await bot.edit_message_reply_markup(
-            chat_id=chat_id,
-            message_id=caption_message.message_id,
+    if text_reply_markup is not None and media_group_sent:
+        control_message = await bot.send_message(
+            chat_id,
+            "Управление постом:",
             reply_markup=text_reply_markup,
         )
+        sent_messages.append(control_message)
     return sent_messages
 
 

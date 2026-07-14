@@ -69,6 +69,16 @@ class FakeBot:
         self.calls.append(result)
         return result
 
+    async def send_message(
+        self,
+        chat_id: int,
+        text: str,
+        reply_markup: object | None = None,
+    ) -> tuple[str, int, str, bool]:
+        result = ("message", chat_id, text, reply_markup is not None)
+        self.calls.append(result)
+        return result
+
 
 async def test_video_chunks() -> None:
     """Текст становится подписью первого медиа, без отдельного сообщения."""
@@ -94,6 +104,13 @@ async def test_video_chunks() -> None:
         [{"type": "photo", "file_id": "photo"}, {"type": "video", "file_id": "video"}],
         "text",
     ) == [("group", 1, 2, "text", None)]
+    assert await send_post_content(
+        bot,
+        1,
+        [{"type": "photo", "file_id": "photo"}, {"type": "video", "file_id": "video"}],
+        "text",
+        text_reply_markup=object(),
+    ) == [("group", 1, 2, "text", None), ("message", 1, "Управление постом:", True)]
 
 
 def test_main_menus_and_localization() -> None:

@@ -94,6 +94,7 @@ def _decode_json(value: object, fallback: object) -> object:
 
 def _record_to_post(record: asyncpg.Record) -> QueuedPost:
     """Преобразует запись PostgreSQL в типизированную модель очереди."""
+    record_data = dict(record)
     media_value = _decode_json(record["media_file_ids"], [])
     prices_value = _decode_json(record["price_data"], {})
     media_items: list[dict[str, str]] = []
@@ -115,7 +116,7 @@ def _record_to_post(record: asyncpg.Record) -> QueuedPost:
         id=record["id"],
         author_telegram_id=record["author_telegram_id"],
         author_role=record["author_role"],
-        author_shop_name=record.get("author_shop_name", ""),
+        author_shop_name=record_data.get("author_shop_name") or "",
         language_code=record["language_code"],
         media_items=media_items,
         description=record["description"],

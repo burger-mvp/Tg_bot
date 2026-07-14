@@ -2,6 +2,7 @@
 
 import csv
 import io
+import logging
 from datetime import datetime
 
 from aiogram import F, Router
@@ -26,6 +27,7 @@ from roles import is_super_admin
 
 
 router = Router(name=__name__)
+logger = logging.getLogger(__name__)
 SET_TRUSTED_SELLER_TEXTS = frozenset({"🌟 Назначить доверенного продавца", "🌟 Assign trusted seller"})
 SET_ADMIN_TEXTS = frozenset({"👤 Назначить администратора", "👤 Assign administrator"})
 VIEW_QUEUE_TEXTS = frozenset({"📋 Просмотр очереди", "📋 View queue"})
@@ -208,23 +210,25 @@ async def view_queue_status(message: Message, state: FSMContext) -> None:
         return
 
     await state.clear()
-    
-    language_code = await get_user_language(message.from_user.id)
-    if language_code not in SUPPORTED_LANGUAGE_CODES:
-        language_code = "ru"
-    
-    stats = await get_queue_statistics()
-    
-    if stats["total"] == 0:
-        message_text = t(language_code, "queue_empty")
-    else:
+
+    try:
+        language_code = await get_user_language(message.from_user.id)
+        if language_code not in SUPPORTED_LANGUAGE_CODES:
+            language_code = "ru"
+
+        stats = await get_queue_statistics()
+        queued_posts = await get_queued_posts()
+
+        if not queued_posts and stats["queued"] == 0:
+            await message.answer(t(language_code, "publication_queue_empty"))
+            return
+
         message_text = t(language_code, "queue_status").format(
             total=stats["total"],
             queued=stats["queued"],
             published=stats["published"],
             waiting_duplicate=stats["waiting_duplicate"],
         )
-        queued_posts = await get_queued_posts()
         if queued_posts:
             queue_lines = [t(language_code, "queue_list_header")]
             for index, post in enumerate(queued_posts, start=1):
@@ -239,8 +243,11 @@ async def view_queue_status(message: Message, state: FSMContext) -> None:
                     )
                 )
             message_text = f"{message_text}\n\n" + "\n".join(queue_lines)
-    
-    await message.answer(message_text)
+
+        await message.answer(message_text)
+    except Exception as error:
+        logger.exception("Ошибка при выводе очереди для супер-админа %s", message.from_user.id)
+        await message.answer(f"Ошибка при выводе очереди: {error}")
 
 
 @router.message(StateFilter("*"), F.text.in_(EXPORT_USERS_TEXTS))

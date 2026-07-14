@@ -78,6 +78,7 @@ RU_TEXTS = {
     "queue_list_header": "Ближайшие посты к публикации:",
     "queue_list_item": "{index}. {shop_name} — {scheduled_at}\n{description}",
     "queue_empty": "Очередь пуста. Все посты опубликованы.",
+    "publication_queue_empty": "Очередь публикаций пуста.",
     "users_export_header": "📊 **Экспорт таблицы users**\n\nФайл содержит всех зарегистрированных пользователей.",
     "info_message": """🤖 **О боте KPP Motors**
 
@@ -179,6 +180,7 @@ EN_TEXTS = {
     "queue_list_header": "Next posts scheduled for publication:",
     "queue_list_item": "{index}. {shop_name} — {scheduled_at}\n{description}",
     "queue_empty": "Queue is empty. All posts have been published.",
+    "publication_queue_empty": "Publication queue is empty.",
     "users_export_header": "📊 **Users table export**\n\nFile contains all registered users.",
     "info_message": """🤖 **About KPP Motors Bot**
 
