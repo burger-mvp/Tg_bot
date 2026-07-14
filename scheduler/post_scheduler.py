@@ -139,7 +139,7 @@ class PostScheduler:
         if not TEST_MODE and (current_time < WORKDAY_START or current_time > WORKDAY_END):
             return
 
-        post = await claim_next_queued_post()
+        post = await claim_next_queued_post(ignore_schedule=TEST_MODE)
         if post is None:
             return
         try:
@@ -166,7 +166,7 @@ class PostScheduler:
 
     async def duplicate_post(self, post_id: UUID) -> None:
         """Повторно публикует пост и удаляет его из базы только после успеха."""
-        post = await claim_post_for_duplicate(post_id)
+        post = await claim_post_for_duplicate(post_id, ignore_schedule=TEST_MODE)
         if post is None:
             return
         try:

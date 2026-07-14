@@ -337,7 +337,7 @@ async def update_pending_post_text(post_id: UUID, description: str, post_text: s
     return _record_to_post(record) if record is not None else None
 
 
-async def claim_next_queued_post() -> QueuedPost | None:
+async def claim_next_queued_post(ignore_schedule: bool = False) -> QueuedPost | None:
     """Атомарно резервирует один самый ранний пост для публикации."""
     record = await _get_pool().fetchrow(
         """
@@ -345,7 +345,7 @@ async def claim_next_queued_post() -> QueuedPost | None:
             SELECT id
             FROM post_queue
             WHERE status = 'queued'
-              AND scheduled_at <= NOW()
+              AND ($1 OR scheduled_at <= NOW())
             ORDER BY approved_at NULLS LAST, created_at
             FOR UPDATE SKIP LOCKED
             LIMIT 1
@@ -361,7 +361,8 @@ async def claim_next_queued_post() -> QueuedPost | None:
             JOIN users u ON u.telegram_id = pq.author_telegram_id
             WHERE pq.id = queue.id
         ).*
-        """
+        """,
+        ignore_schedule,
     )
     return _record_to_post(record) if record is not None else None
 
@@ -461,7 +462,7 @@ async def recover_interrupted_posts(scheduled_at: datetime) -> None:
     )
 
 
-async def claim_post_for_duplicate(post_id: UUID) -> QueuedPost | None:
+async def claim_post_for_duplicate(post_id: UUID, ignore_schedule: bool = False) -> QueuedPost | None:
     """Атомарно резервирует пост для единственной повторной публикации."""
     record = await _get_pool().fetchrow(
         """
@@ -470,7 +471,7 @@ async def claim_post_for_duplicate(post_id: UUID) -> QueuedPost | None:
             updated_at = NOW()
         WHERE id = $1
           AND status = 'published'
-          AND duplicate_due_at <= NOW()
+          AND ($2 OR duplicate_due_at <= NOW())
         RETURNING (
             SELECT row(pq.*, u.shop_name)
             FROM post_queue pq
@@ -479,6 +480,7 @@ async def claim_post_for_duplicate(post_id: UUID) -> QueuedPost | None:
         ).*
         """,
         post_id,
+        ignore_schedule,
     )
     return _record_to_post(record) if record is not None else None
 
