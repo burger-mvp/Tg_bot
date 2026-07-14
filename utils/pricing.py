@@ -11,10 +11,10 @@ BODY_MARKUP: Final = Decimal("1.15")
 POST_HEADER: Final = "🇦🇪 🇨🇳 🇷🇺 🇰🇿"
 TELEGRAM_CAPTION_LIMIT: Final = 1_024
 _TRUNCATION_SUFFIX: Final = "..."
-FIXED_FOOTER: Final = """Все запчасти согласовываются с вами в онлайн-режиме, что упрощает процесс. ‼️
+RU_FIXED_FOOTER: Final = """Все запчасти согласовываются с вами в онлайн-режиме, что упрощает процесс. ‼️
 
 Условия доставки:
-⚠️ Engine / ДВС, Gearbox / КПП и ходовая часть: 2,3$ за кг.
+⚠️ ДВС, КПП и ходовая часть: 2,3$ за кг.
 ⚠️ Кузовные детали, оптика, машинокомплекты — по запросу.
 ⚠️ Запчасти для спецтехники Caterpillar, Komatsu, JCB — по запросу.
 
@@ -29,6 +29,24 @@ FIXED_FOOTER: Final = """Все запчасти согласовываются 
 Наш канал на YouTube: https://www.youtube.com/@KppMotors
 
 Продавец: {seller_name}"""
+EN_FIXED_FOOTER: Final = """All parts are agreed with you online, which makes the process easier. ‼️
+
+Delivery terms:
+⚠️ Engine, gearbox and suspension parts: $2.3 per kg.
+⚠️ Body parts, optics, vehicle kits — on request.
+⚠️ Parts for Caterpillar, Komatsu, JCB special equipment — on request.
+
+To place an order or get advice, contact: ✏️
+✏️ @Kpp_Motors_Roman
+✏️ @zakupUAE
+✏️ @Kpp_Motors1
+✏️ @Annakppmotors
+✏️ @Kpp_Motors
+✏️ @IvanSat74
+
+Our YouTube channel: https://www.youtube.com/@KppMotors
+
+Seller: {seller_name}"""
 
 
 def round_price_up_to_tens(price: Decimal) -> Decimal:
@@ -81,33 +99,51 @@ def serialize_price(aed_price: Decimal, markup: Decimal) -> dict[str, int | str]
     }
 
 
-def format_post_text(description: str, post_kind: str, price_data: dict[str, Any], seller_name: str = "") -> str:
+def format_post_text(
+    description: str,
+    post_kind: str,
+    price_data: dict[str, Any],
+    seller_name: str = "",
+    language_code: str = "ru",
+) -> str:
     """Собирает итоговый текст в обязательном порядке: шапка, описание, цены, подвал с подписью продавца."""
+    is_russian = language_code == "ru"
     if post_kind == "engine_only":
-        price_lines = f"Цена Engine / ДВС: ${price_data['engine']['usd']} USD"
+        label = "Цена ДВС" if is_russian else "Engine price"
+        price_lines = f"{label}: ${price_data['engine']['usd']} USD"
     elif post_kind == "engine_with_transmission":
+        engine_label = "Цена только ДВС" if is_russian else "Engine only price"
+        set_label = "Цена ДВС с АКПП" if is_russian else "Engine with Gearbox price"
         price_lines = (
-            f"Цена только Engine / ДВС: ${price_data['engine']['usd']} USD\n"
-            f"Цена Engine / ДВС с Gearbox / АКПП: ${price_data['engine_with_transmission']['usd']} USD"
+            f"{engine_label}: ${price_data['engine']['usd']} USD\n"
+            f"{set_label}: ${price_data['engine_with_transmission']['usd']} USD"
         )
     elif post_kind == "body":
-        price_lines = f"Цена: ${price_data['body']['usd']} USD"
+        label = "Цена" if is_russian else "Price"
+        price_lines = f"{label}: ${price_data['body']['usd']} USD"
     else:
         raise ValueError(f"Неизвестная категория поста: {post_kind}")
 
-    footer = FIXED_FOOTER.format(seller_name=seller_name or "—")
+    footer_template = RU_FIXED_FOOTER if is_russian else EN_FIXED_FOOTER
+    footer = footer_template.format(seller_name=seller_name or "—")
     return f"{POST_HEADER}\n\n{description}\n\n{price_lines}\n\n{footer}"
 
 
-def format_post_caption(description: str, post_kind: str, price_data: dict[str, Any], seller_name: str = "") -> str:
+def format_post_caption(
+    description: str,
+    post_kind: str,
+    price_data: dict[str, Any],
+    seller_name: str = "",
+    language_code: str = "ru",
+) -> str:
     """Формирует подпись до 1024 символов, сокращая только пользовательское описание."""
-    post_text = format_post_text(description, post_kind, price_data, seller_name)
+    post_text = format_post_text(description, post_kind, price_data, seller_name, language_code)
     if _telegram_length(post_text) <= TELEGRAM_CAPTION_LIMIT:
         return post_text
 
-    fixed_text_length = _telegram_length(format_post_text("", post_kind, price_data, seller_name))
+    fixed_text_length = _telegram_length(format_post_text("", post_kind, price_data, seller_name, language_code))
     description_limit = TELEGRAM_CAPTION_LIMIT - fixed_text_length - _telegram_length(_TRUNCATION_SUFFIX)
     if description_limit < 1:
         raise ValueError("Обязательная часть поста превышает лимит подписи Telegram")
     shortened_description = f"{_truncate_for_telegram(description, description_limit).rstrip()}{_TRUNCATION_SUFFIX}"
-    return format_post_text(shortened_description, post_kind, price_data, seller_name)
+    return format_post_text(shortened_description, post_kind, price_data, seller_name, language_code)

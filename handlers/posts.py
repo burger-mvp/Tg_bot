@@ -1,5 +1,6 @@
 """Создание постов, модерация супер-администратором и постановка в очередь."""
 
+import html
 import logging
 
 from typing import Any, Final
@@ -161,7 +162,7 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
 
     role = await get_role_from_db_or_config(message.from_user.id)
     shop_name = await get_user_shop_name(message.from_user.id) or ""
-    post_text = format_post_text(description, post_kind, price_data, seller_name=shop_name)
+    post_text = format_post_text(description, post_kind, price_data, seller_name=shop_name, language_code=language_code)
     post_id = uuid4()
     # Доверенные продавцы и администраторы публикуются без модерации
     status = "queued" if role in ("admin", "super_admin", "trusted_seller") else "pending_moderation"
@@ -643,7 +644,12 @@ async def start_moderation_edit(callback: CallbackQuery, state: FSMContext) -> N
     await state.update_data(post_id=str(post.id), language_code=post.language_code)
     await callback.answer()
     if callback.message is not None:
-        await callback.message.answer(t(post.language_code, "edit_prompt"), reply_markup=cancel_keyboard(post.language_code))
+        escaped_description = html.escape(post.description)
+        await callback.message.answer(
+            t(post.language_code, "edit_prompt_with_description", description=escaped_description),
+            reply_markup=cancel_keyboard(post.language_code),
+            parse_mode="HTML",
+        )
 
 
 @router.message(ModerationEdit.waiting_for_description, F.text)
@@ -678,7 +684,13 @@ async def save_moderation_edit(message: Message, state: FSMContext, bot: Bot) ->
         await state.clear()
         await message.answer(t(language_code, "already_moderated"))
         return
-    post_text = format_post_text(description, original_post.post_kind, original_post.price_data, seller_name=original_post.author_shop_name)
+    post_text = format_post_text(
+        description,
+        original_post.post_kind,
+        original_post.price_data,
+        seller_name=original_post.author_shop_name,
+        language_code=original_post.language_code,
+    )
     updated_post = await update_pending_post_text(post_id, description, post_text)
     await state.clear()
     if updated_post is None:

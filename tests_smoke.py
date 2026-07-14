@@ -148,7 +148,20 @@ def test_prices_text_and_slots() -> None:
     )
     assert text.startswith("🇦🇪 🇨🇳 🇷🇺 🇰🇿")
     assert "$110 USD" in text and "$220 USD" in text
+    assert "Цена только ДВС: $110 USD" in text
+    assert "Цена ДВС с АКПП: $220 USD" in text
+    assert "Engine / ДВС" not in text
+    assert "Gearbox / АКПП" not in text
     assert "@Kpp_Motors_Roman" in text
+
+    english_text = format_post_text(
+        "Description",
+        "engine_with_transmission",
+        {"engine": {"usd": 110}, "engine_with_transmission": {"usd": 220}},
+        language_code="en",
+    )
+    assert "Engine only price: $110 USD" in english_text
+    assert "Engine with Gearbox price: $220 USD" in english_text
 
     assert parse_aed_price("15000") == Decimal("15000")
     assert parse_aed_price("199") == Decimal("200")
@@ -163,7 +176,7 @@ def test_prices_text_and_slots() -> None:
 
     caption = format_post_caption("😀" * 4_000, "engine_only", {"engine": {"usd": 110}})
     assert len(caption.encode("utf-16-le")) // 2 <= TELEGRAM_CAPTION_LIMIT
-    assert "...\n\nЦена Engine / ДВС: $110 USD" in caption
+    assert "...\n\nЦена ДВС: $110 USD" in caption
     assert caption.endswith("Продавец: —")
 
     moscow = ZoneInfo("Europe/Moscow")

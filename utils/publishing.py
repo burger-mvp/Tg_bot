@@ -133,6 +133,12 @@ async def send_queued_post(
         bot,
         chat_id,
         post.media_items,
-        format_post_caption(post.description, post.post_kind, post.price_data, seller_name=post.author_shop_name),
+        format_post_caption(
+            post.description,
+            post.post_kind,
+            post.price_data,
+            seller_name=post.author_shop_name,
+            language_code=post.language_code,
+        ),
         text_reply_markup=text_reply_markup,
     )
