@@ -7,6 +7,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
 from aiogram.exceptions import TelegramNetworkError
+from aiogram.types import BotCommand
 
 from config import TELEGRAM_API_SERVER_URL, TOKEN
 from database import close_db, init_db
@@ -40,6 +41,7 @@ async def main() -> None:
     )
 
     bot = create_bot()
+    await bot.set_my_commands([BotCommand(command="info", description="Информация о боте")])
     dispatcher = Dispatcher()
     dispatcher.update.outer_middleware(RoleMiddleware())
     dispatcher.include_router(start_router)

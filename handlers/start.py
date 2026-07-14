@@ -8,7 +8,7 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 
 from database import (
     assign_shop_name_on_registration,
@@ -16,9 +16,10 @@ from database import (
     get_user_phone_number,
     save_phone_number_and_mark_registered,
     update_user_role,
+    update_user_username,
     upsert_user,
 )
-from keyboards import LANGUAGE_KEYBOARD, main_menu, phone_keyboard
+from keyboards import LANGUAGE_KEYBOARD, main_menu, phone_keyboard, start_keyboard
 from locales import SUPPORTED_LANGUAGE_CODES, t
 from roles import get_role_from_db_or_config, notification_recipient_ids
 
@@ -26,6 +27,9 @@ from roles import get_role_from_db_or_config, notification_recipient_ids
 router = Router(name=__name__)
 logger = logging.getLogger(__name__)
 MAX_PHONE_NUMBER_LENGTH: Final = 64
+START_REGISTRATION_TEXTS: Final = frozenset({
+    "🚀 Начать", "🚀 Start", "🚀 ابدأ", "🚀 شروع", "🚀 شروع کریں", "🚀 शुरू करें", "🚀 শুরু করুন",
+})
 
 
 class Registration(StatesGroup):
@@ -66,9 +70,19 @@ async def _notify_registration(bot: Bot, telegram_id: int, phone_number: str) ->
             logger.warning("Не удалось отправить уведомление о регистрации пользователю %s", recipient_id)
 
 
+async def _begin_registration(message: Message, state: FSMContext) -> None:
+    """Открывает выбор языка для нового или удаленного из БД пользователя."""
+    await state.clear()
+    await message.answer(
+        t("ru", "start_prompt"),
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    await message.answer(t("ru", "choose_language"), reply_markup=LANGUAGE_KEYBOARD)
+
+
 @router.message(CommandStart())
 async def command_start(message: Message, state: FSMContext) -> None:
-    """Запускает или продолжает регистрацию, не повторяя уже пройденные шаги."""
+    """Запускает регистрацию или открывает главное меню зарегистрированного пользователя."""
     if message.from_user is None:
         return
 
@@ -76,7 +90,7 @@ async def command_start(message: Message, state: FSMContext) -> None:
     telegram_id = message.from_user.id
     language_code = await get_user_language(telegram_id)
     if language_code not in SUPPORTED_LANGUAGE_CODES:
-        await message.answer(t("ru", "choose_language"), reply_markup=LANGUAGE_KEYBOARD)
+        await message.answer(t("ru", "start_prompt"), reply_markup=start_keyboard())
         return
 
     # Проверяем, есть ли телефон (зарегистрирован ли пользователь)
@@ -88,7 +102,19 @@ async def command_start(message: Message, state: FSMContext) -> None:
     # Пользователь уже зарегистрирован, обновляем роль и показываем меню
     role = await get_role_from_db_or_config(telegram_id)
     await update_user_role(telegram_id, role)
+    await update_user_username(telegram_id, message.from_user.username)
     await show_welcome(message, role, language_code)
+
+
+@router.message(F.text.in_(START_REGISTRATION_TEXTS))
+async def start_registration_from_button(message: Message, state: FSMContext) -> None:
+    """Запускает тот же сценарий регистрации по Reply-кнопке «Начать»."""
+    if message.from_user is None:
+        return
+    if await get_user_language(message.from_user.id) in SUPPORTED_LANGUAGE_CODES:
+        await command_start(message, state)
+        return
+    await _begin_registration(message, state)
 
 
 @router.callback_query(F.data.startswith("language:"))
@@ -105,7 +131,7 @@ async def select_language(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     telegram_id = callback.from_user.id
     role = await get_role_from_db_or_config(telegram_id)
-    await upsert_user(telegram_id, role, language_code)
+    await upsert_user(telegram_id, role, language_code, callback.from_user.username)
 
     await callback.answer(t(language_code, "language_saved"))
     await callback.message.edit_reply_markup(reply_markup=None)

@@ -8,8 +8,10 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(20) NOT NULL DEFAULT 'user'
         CHECK (role IN ('user', 'admin', 'super_admin', 'trusted_seller')),
     language_code VARCHAR(2) CHECK (language_code IN ('ru', 'en', 'ar', 'fa', 'ur', 'hi', 'bn') OR language_code IS NULL),
+    username TEXT,
     registered_at TIMESTAMPTZ,
-    shop_name TEXT
+    shop_name TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Очередь модерации, отложенных публикаций и повторов через семь дней.

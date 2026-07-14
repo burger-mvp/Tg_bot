@@ -28,11 +28,12 @@ from keyboards import (
     cancel_keyboard,
     category_keyboard,
     engine_type_keyboard,
+    main_menu,
     media_step_keyboard,
     moderation_keyboard,
 )
 from locales import SUPPORTED_LANGUAGE_CODES, normalize_language_code, t
-from roles import get_role, is_admin_or_higher, is_super_admin
+from roles import get_role_from_db_or_config, is_super_admin
 from scheduler.post_scheduler import next_publication_slot
 from utils.pricing import BODY_MARKUP, ENGINE_MARKUP, format_post_text, parse_aed_price, serialize_price
 from utils.publishing import send_queued_post
@@ -158,7 +159,7 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
         await message.answer(t(language_code, "post_cancelled"))
         return
 
-    role = get_role(message.from_user.id)
+    role = await get_role_from_db_or_config(message.from_user.id)
     shop_name = await get_user_shop_name(message.from_user.id) or ""
     post_text = format_post_text(description, post_kind, price_data, seller_name=shop_name)
     post_id = uuid4()
@@ -185,7 +186,10 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
     await state.clear()
 
     if status == "queued":
-        await message.answer(t(language_code, "post_added_queue"))
+        await message.answer(
+            t(language_code, "post_added_queue"),
+            reply_markup=main_menu(role, language_code),
+        )
         return
 
     try:
@@ -219,7 +223,10 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
         await message.answer(t(language_code, "moderation_delivery_failed"))
         return
 
-    await message.answer(t(language_code, "post_sent_for_moderation"))
+    await message.answer(
+        t(language_code, "post_sent_for_moderation"),
+        reply_markup=main_menu(role, language_code),
+    )
 
 
 async def _finish_description(message: Message, state: FSMContext, bot: Bot) -> None:
@@ -273,6 +280,8 @@ async def finish_media_collection(message: Message, state: FSMContext) -> None:
         )
         return
     await state.set_state(PostCreation.waiting_for_category)
+    role = await get_role_from_db_or_config(message.from_user.id)
+    await message.answer(t(language_code, "media_collection_complete"), reply_markup=main_menu(role, language_code))
     await message.answer(t(language_code, "choose_category"), reply_markup=category_keyboard(language_code))
 
 
@@ -515,6 +524,8 @@ async def cancel_post_creation(callback: CallbackQuery, state: FSMContext) -> No
             await callback.message.edit_reply_markup(reply_markup=None)
         except TelegramBadRequest:
             pass
+        role = await get_role_from_db_or_config(callback.from_user.id)
+        await callback.message.answer(t(language_code, "post_cancelled"), reply_markup=main_menu(role, language_code))
 
 
 def _post_id_from_callback(callback: CallbackQuery, action: str) -> UUID | None:
@@ -531,8 +542,8 @@ def _post_id_from_callback(callback: CallbackQuery, action: str) -> UUID | None:
 
 
 async def _require_super_admin(callback: CallbackQuery) -> bool:
-    """Ограничивает модерацию администраторами и супер-администратором."""
-    if await is_admin_or_higher(callback.from_user.id):
+    """Ограничивает модерацию только супер-администраторами."""
+    if is_super_admin(callback.from_user.id):
         return True
     await callback.answer(t("ru", "access_denied"), show_alert=True)
     return False
@@ -616,7 +627,7 @@ async def start_moderation_edit(callback: CallbackQuery, state: FSMContext) -> N
 @router.message(ModerationEdit.waiting_for_description, F.text)
 async def save_moderation_edit(message: Message, state: FSMContext, bot: Bot) -> None:
     """Сохраняет новую редакцию и повторно показывает её администратору."""
-    if message.from_user is None or not await is_admin_or_higher(message.from_user.id):
+    if message.from_user is None or not is_super_admin(message.from_user.id):
         await state.clear()
         await message.answer(t("ru", "access_denied"))
         return

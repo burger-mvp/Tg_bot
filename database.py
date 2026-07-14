@@ -50,6 +50,21 @@ async def init_db() -> None:
             min_size=_MIN_POOL_SIZE,
             max_size=_MAX_POOL_SIZE,
         )
+        await _ensure_schema_updates(_pool)
+
+
+async def _ensure_schema_updates(pool: asyncpg.Pool) -> None:
+    """Добавляет поля, нужные текущей версии, в уже развернутую базу."""
+    async with pool.acquire() as connection:
+        await connection.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT"
+        )
+        await connection.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ"
+        )
+        await connection.execute(
+            "UPDATE users SET created_at = COALESCE(created_at, registered_at, NOW()) WHERE created_at IS NULL"
+        )
 
 
 async def close_db() -> None:
@@ -117,19 +132,21 @@ def _record_to_post(record: asyncpg.Record) -> QueuedPost:
     )
 
 
-async def upsert_user(telegram_id: int, role: str, language_code: str) -> None:
+async def upsert_user(telegram_id: int, role: str, language_code: str, username: str | None = None) -> None:
     """Создает пользователя или обновляет его актуальные роль и язык."""
     await _get_pool().execute(
         """
-        INSERT INTO users (telegram_id, role, language_code)
-        VALUES ($1, $2, $3)
+        INSERT INTO users (telegram_id, role, language_code, username, created_at)
+        VALUES ($1, $2, $3, $4, NOW())
         ON CONFLICT (telegram_id) DO UPDATE
         SET role = EXCLUDED.role,
-            language_code = EXCLUDED.language_code
+            language_code = EXCLUDED.language_code,
+            username = EXCLUDED.username
         """,
         telegram_id,
         role,
         language_code,
+        username,
     )
 
 
@@ -155,6 +172,15 @@ async def update_user_role(telegram_id: int, role: str) -> None:
         "UPDATE users SET role = $2 WHERE telegram_id = $1",
         telegram_id,
         role,
+    )
+
+
+async def update_user_username(telegram_id: int, username: str | None) -> None:
+    """Сохраняет актуальный username зарегистрированного пользователя."""
+    await _get_pool().execute(
+        "UPDATE users SET username = $2 WHERE telegram_id = $1",
+        telegram_id,
+        username,
     )
 
 
@@ -507,14 +533,11 @@ async def get_user_by_shop_name(shop_name: str) -> int | None:
 
 
 async def reject_post(post_id: UUID) -> tuple[int, str] | None:
-    """Отклоняет пост модерации и возвращает (author_telegram_id, shop_name) для уведомления."""
+    """Удаляет отклоненный пост и возвращает его автора для уведомления."""
     record = await _get_pool().fetchrow(
         """
-        UPDATE post_queue
-        SET status = 'rejected',
-            updated_at = NOW()
-        WHERE id = $1
-          AND status = 'pending_moderation'
+        DELETE FROM post_queue
+        WHERE id = $1 AND status = 'pending_moderation'
         RETURNING author_telegram_id, (
             SELECT shop_name FROM users WHERE telegram_id = post_queue.author_telegram_id
         ) AS shop_name
@@ -563,7 +586,7 @@ async def get_queue_statistics() -> dict[str, int]:
             COUNT(*) as total,
             COUNT(*) FILTER (WHERE status = 'queued') as queued,
             COUNT(*) FILTER (WHERE status = 'published') as published,
-            COUNT(*) FILTER (WHERE status = 'waiting_for_duplicate') as waiting_duplicate
+            COUNT(*) FILTER (WHERE status = 'published' AND duplicate_due_at IS NOT NULL) as waiting_duplicate
         FROM post_queue
         """
     )
@@ -577,6 +600,22 @@ async def get_queue_statistics() -> dict[str, int]:
     }
 
 
+async def get_queued_posts(limit: int = 20) -> list[QueuedPost]:
+    """Возвращает ближайшие посты, ожидающие публикации."""
+    records = await _get_pool().fetch(
+        """
+        SELECT pq.*, u.shop_name AS author_shop_name
+        FROM post_queue pq
+        JOIN users u ON u.telegram_id = pq.author_telegram_id
+        WHERE pq.status = 'queued'
+        ORDER BY pq.scheduled_at, pq.created_at
+        LIMIT $1
+        """,
+        limit,
+    )
+    return [_record_to_post(record) for record in records]
+
+
 async def get_all_users() -> list[dict[str, Any]]:
     """Возвращает всех зарегистрированных пользователей для экспорта."""
     records = await _get_pool().fetch(
@@ -586,6 +625,7 @@ async def get_all_users() -> list[dict[str, Any]]:
             role, 
             language_code, 
             phone_number, 
+            username,
             shop_name, 
             created_at
         FROM users

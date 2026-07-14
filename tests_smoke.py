@@ -5,7 +5,8 @@ from datetime import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from keyboards import main_menu
+from keyboards import main_menu, media_step_keyboard, start_keyboard
+from locales import t
 from scheduler.post_scheduler import next_publication_slot
 from scheduler.post_scheduler import TEST_DUPLICATE_DELAY, TEST_QUEUE_INTERVAL, duplicate_delay, queue_slot_interval
 from utils.pricing import (
@@ -35,6 +36,18 @@ class FakeBot:
     ) -> tuple[str, int, str, str | None]:
         del reply_markup
         result = ("video", chat_id, video, caption)
+        self.calls.append(result)
+        return result
+
+    async def send_photo(
+        self,
+        chat_id: int,
+        photo: str,
+        caption: str | None = None,
+        reply_markup: object | None = None,
+    ) -> tuple[str, int, str, str | None]:
+        del reply_markup
+        result = ("photo", chat_id, photo, caption)
         self.calls.append(result)
         return result
 
@@ -75,16 +88,35 @@ async def test_video_chunks() -> None:
     assert await send_post_content(bot, 1, [{"type": "document", "file_id": "movie"}], "text") == [
         ("document", 1, "movie", "text"),
     ]
+    assert await send_post_content(
+        bot,
+        1,
+        [{"type": "photo", "file_id": "photo"}, {"type": "video", "file_id": "video"}],
+        "text",
+    ) == [("group", 1, 2, "text", None)]
 
 
-def test_main_menus() -> None:
-    """Проверяет доступность создания поста и панелей для административных ролей."""
+def test_main_menus_and_localization() -> None:
+    """Проверяет состав клавиатур и ключевые локализованные тексты."""
     def button_texts(role: str) -> list[str]:
         return [button.text for row in main_menu(role, "ru").keyboard for button in row]
 
     assert button_texts("user") == ["Создать пост"]
-    assert button_texts("admin") == ["Создать пост", "Админ-панель"]
-    assert button_texts("super_admin") == ["Создать пост", "Админ-панель", "Супер админ панель"]
+    assert button_texts("admin") == ["Создать пост"]
+    assert button_texts("super_admin") == [
+        "Создать пост",
+        "🌟 Назначить доверенного продавца",
+        "👤 Назначить администратора",
+        "📋 Просмотр очереди",
+        "📊 Выгрузить users",
+    ]
+    assert media_step_keyboard("ru").keyboard[0][0].text == "✅ Медиа загружены"
+    assert start_keyboard("ru").keyboard[0][0].text == "🚀 Начать"
+    assert t("ru", "engine") == "Двигатель / ДВС"
+    assert t("ru", "engine_with_transmission") == "Двигатель с КПП"
+    for language_code in ("en", "fa", "ur", "hi", "bn"):
+        assert t(language_code, "engine") == "Engine"
+        assert t(language_code, "engine_with_transmission") == "Engine with Gearbox"
 
 
 def test_prices_text_and_slots() -> None:
@@ -102,6 +134,8 @@ def test_prices_text_and_slots() -> None:
     assert "@Kpp_Motors_Roman" in text
 
     assert parse_aed_price("15000") == Decimal("15000")
+    assert parse_aed_price("199") == Decimal("200")
+    assert parse_aed_price("102") == Decimal("110")
     for invalid_price in ("15000 ", "10к", "12500.50", "0"):
         try:
             parse_aed_price(invalid_price)
@@ -112,8 +146,8 @@ def test_prices_text_and_slots() -> None:
 
     caption = format_post_caption("😀" * 4_000, "engine_only", {"engine": {"usd": 110}})
     assert len(caption.encode("utf-16-le")) // 2 <= TELEGRAM_CAPTION_LIMIT
-    assert "...\n\nЦена ДВС: $110 USD" in caption
-    assert caption.endswith("https://www.youtube.com/@KppMotors")
+    assert "...\n\nЦена Engine / ДВС: $110 USD" in caption
+    assert caption.endswith("Продавец: —")
 
     moscow = ZoneInfo("Europe/Moscow")
     assert next_publication_slot(datetime(2026, 7, 13, 8, 29, tzinfo=moscow)).isoformat().startswith(
@@ -132,7 +166,7 @@ def test_prices_text_and_slots() -> None:
 
 
 if __name__ == "__main__":
-    test_main_menus()
+    test_main_menus_and_localization()
     test_prices_text_and_slots()
     asyncio.run(test_video_chunks())
     print("Smoke checks passed.")

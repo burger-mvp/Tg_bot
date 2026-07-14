@@ -5,7 +5,6 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
 )
 
 from locales import t
@@ -40,6 +39,14 @@ def main_menu(role: str, language_code: str) -> ReplyKeyboardMarkup:
         ])
 
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
+
+
+def start_keyboard(language_code: str = "ru") -> ReplyKeyboardMarkup:
+    """Создает единственную кнопку запуска первичной регистрации."""
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=t(language_code, "start_registration"))]],
+        resize_keyboard=True,
+    )
 
 
 def phone_keyboard(language_code: str) -> ReplyKeyboardMarkup:
@@ -105,17 +112,5 @@ def moderation_keyboard(post_id: str, language_code: str) -> InlineKeyboardMarku
             [InlineKeyboardButton(text=t(language_code, "approve"), callback_data=f"moderation:approve:{post_id}")],
             [InlineKeyboardButton(text=t(language_code, "edit"), callback_data=f"moderation:edit:{post_id}")],
             [InlineKeyboardButton(text=t(language_code, "reject"), callback_data=f"moderation:reject:{post_id}")],
-        ]
-    )
-
-
-def super_admin_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
-    """Создает дополнительное меню супер-администратора."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=t(language_code, "set_trusted_seller"), callback_data="super_admin:set_trusted")],
-            [InlineKeyboardButton(text=t(language_code, "set_admin"), callback_data="super_admin:set_admin")],
-            [InlineKeyboardButton(text=t(language_code, "view_queue"), callback_data="super_admin:view_queue")],
-            [InlineKeyboardButton(text=t(language_code, "export_users"), callback_data="super_admin:export_users")],
         ]
     )
