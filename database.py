@@ -349,18 +349,17 @@ async def claim_next_queued_post(ignore_schedule: bool = False) -> QueuedPost | 
             ORDER BY approved_at NULLS LAST, created_at
             FOR UPDATE SKIP LOCKED
             LIMIT 1
+        ), updated AS (
+            UPDATE post_queue AS queue
+            SET status = 'publishing',
+                updated_at = NOW()
+            FROM candidate
+            WHERE queue.id = candidate.id
+            RETURNING queue.*
         )
-        UPDATE post_queue AS queue
-        SET status = 'publishing',
-            updated_at = NOW()
-        FROM candidate
-        WHERE queue.id = candidate.id
-        RETURNING (
-            SELECT row(pq.*, u.shop_name)
-            FROM post_queue pq
-            JOIN users u ON u.telegram_id = pq.author_telegram_id
-            WHERE pq.id = queue.id
-        ).*
+        SELECT updated.*, u.shop_name AS author_shop_name
+        FROM updated
+        JOIN users u ON u.telegram_id = updated.author_telegram_id
         """,
         ignore_schedule,
     )
@@ -466,18 +465,18 @@ async def claim_post_for_duplicate(post_id: UUID, ignore_schedule: bool = False)
     """Атомарно резервирует пост для единственной повторной публикации."""
     record = await _get_pool().fetchrow(
         """
-        UPDATE post_queue
-        SET status = 'duplicate_publishing',
-            updated_at = NOW()
-        WHERE id = $1
-          AND status = 'published'
-          AND ($2 OR duplicate_due_at <= NOW())
-        RETURNING (
-            SELECT row(pq.*, u.shop_name)
-            FROM post_queue pq
-            JOIN users u ON u.telegram_id = pq.author_telegram_id
-            WHERE pq.id = post_queue.id
-        ).*
+        WITH updated AS (
+            UPDATE post_queue
+            SET status = 'duplicate_publishing',
+                updated_at = NOW()
+            WHERE id = $1
+              AND status = 'published'
+              AND ($2 OR duplicate_due_at <= NOW())
+            RETURNING *
+        )
+        SELECT updated.*, u.shop_name AS author_shop_name
+        FROM updated
+        JOIN users u ON u.telegram_id = updated.author_telegram_id
         """,
         post_id,
         ignore_schedule,
