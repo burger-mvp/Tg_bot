@@ -12,7 +12,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
 from config import TELEGRAM_API_SERVER_URL
-from roles import notification_recipient_ids
+from roles import super_admin_ids
 from database import (
     approve_post,
     create_post,
@@ -195,8 +195,8 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
         await message.answer(t(language_code, "moderation_delivery_failed"))
         return
     try:
-        # Отправляем уведомление всем супер-админам
-        for admin_id in notification_recipient_ids():
+        # Отправляем уведомление только супер-админам
+        for admin_id in super_admin_ids():
             try:
                 await bot.send_message(
                     admin_id,
@@ -326,7 +326,11 @@ async def finish_media_collection(message: Message, state: FSMContext) -> None:
     language_code = normalize_language_code((await state.get_data()).get("language_code"))
     media_items = (await state.get_data()).get("media_items")
     if not isinstance(media_items, list) or not media_items:
-        await message.answer(t(language_code, "no_media"))
+        # Пользователь нажал кнопку, но не загрузил медиа — остаёмся в том же состоянии
+        await message.answer(
+            t(language_code, "no_media"),
+            reply_markup=media_step_keyboard(language_code)
+        )
         return
     await state.set_state(PostCreation.waiting_for_category)
     await message.answer(t(language_code, "choose_category"), reply_markup=category_keyboard(language_code))
@@ -645,8 +649,8 @@ async def save_moderation_edit(message: Message, state: FSMContext, bot: Bot) ->
         await message.answer(t(language_code, "already_moderated"))
         return
     try:
-        # Отправляем обновленный пост на модерацию всем супер-админам
-        for admin_id in notification_recipient_ids():
+        # Отправляем обновленный пост на модерацию только супер-админам
+        for admin_id in super_admin_ids():
             try:
                 await bot.send_message(
                     admin_id,

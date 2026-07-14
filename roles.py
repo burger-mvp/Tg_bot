@@ -53,5 +53,10 @@ def is_super_admin(telegram_id: int) -> bool:
 
 
 def notification_recipient_ids() -> set[int]:
-    """Возвращает уникальный список получателей служебных уведомлений."""
+    """Возвращает список всех админов для уведомлений о регистрации."""
     return {*SUPER_ADMIN_IDS, *ADMIN_IDS}
+
+
+def super_admin_ids() -> set[int]:
+    """Возвращает список только супер-админов для уведомлений о постах."""
+    return set(SUPER_ADMIN_IDS)
