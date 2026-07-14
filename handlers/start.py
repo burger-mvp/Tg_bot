@@ -5,12 +5,13 @@ from typing import Final
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
 from database import (
+    assign_shop_name_on_registration,
     get_user_language,
     get_user_phone_number,
     save_phone_number_and_mark_registered,
@@ -19,7 +20,7 @@ from database import (
 )
 from keyboards import LANGUAGE_KEYBOARD, main_menu, phone_keyboard
 from locales import SUPPORTED_LANGUAGE_CODES, t
-from roles import get_role, notification_recipient_ids
+from roles import get_role_from_db_or_config, notification_recipient_ids
 
 
 router = Router(name=__name__)
@@ -39,7 +40,8 @@ async def show_welcome(message: Message, role: str, language_code: str) -> None:
         "user": "welcome_user",
         "admin": "welcome_admin",
         "super_admin": "welcome_super_admin",
-    }[role]
+        "trusted_seller": "welcome_trusted_seller",
+    }.get(role, "welcome_user")
     await message.answer(
         t(language_code, greeting_key),
         reply_markup=main_menu(role, language_code),
@@ -77,7 +79,7 @@ async def command_start(message: Message, state: FSMContext) -> None:
         await message.answer(t("ru", "choose_language"), reply_markup=LANGUAGE_KEYBOARD)
         return
 
-    role = get_role(telegram_id)
+    role = await get_role_from_db_or_config(telegram_id)
     await update_user_role(telegram_id, role)
     if not await get_user_phone_number(telegram_id):
         await request_phone_number(message, state, language_code)
@@ -99,7 +101,7 @@ async def select_language(callback: CallbackQuery, state: FSMContext) -> None:
 
     await state.clear()
     telegram_id = callback.from_user.id
-    role = get_role(telegram_id)
+    role = await get_role_from_db_or_config(telegram_id)
     await upsert_user(telegram_id, role, language_code)
 
     await callback.answer(t(language_code, "language_saved"))
@@ -134,12 +136,17 @@ async def save_phone_number(message: Message, state: FSMContext, bot: Bot) -> No
         await message.answer(t(language_code, "send_contact_only"), reply_markup=phone_keyboard(language_code))
         return
 
-    role = get_role(message.from_user.id)
+    role = await get_role_from_db_or_config(message.from_user.id)
     is_new_registration = await save_phone_number_and_mark_registered(
         message.from_user.id,
         phone_number,
         role,
     )
+    
+    # Присваиваем shop_name при первой регистрации
+    if is_new_registration:
+        await assign_shop_name_on_registration(message.from_user.id)
+    
     await state.clear()
 
     await message.answer(t(language_code, "registration_complete"))
@@ -153,3 +160,16 @@ async def reject_non_contact_phone(message: Message, state: FSMContext) -> None:
     """Подсказывает корректный способ передачи номера телефона."""
     language_code = (await state.get_data()).get("language_code")
     await message.answer(t(language_code, "send_contact_only"), reply_markup=phone_keyboard(language_code))
+
+
+@router.message(Command("info"))
+async def command_info(message: Message) -> None:
+    """Отображает информацию о боте на языке пользователя."""
+    if message.from_user is None:
+        return
+    
+    language_code = await get_user_language(message.from_user.id)
+    if language_code not in SUPPORTED_LANGUAGE_CODES:
+        language_code = "ru"
+    
+    await message.answer(t(language_code, "info_message"))

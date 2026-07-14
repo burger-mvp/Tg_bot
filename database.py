@@ -24,6 +24,7 @@ class QueuedPost:
     id: UUID
     author_telegram_id: int
     author_role: str
+    author_shop_name: str
     language_code: str
     media_items: list[dict[str, str]]
     description: str
@@ -99,6 +100,7 @@ def _record_to_post(record: asyncpg.Record) -> QueuedPost:
         id=record["id"],
         author_telegram_id=record["author_telegram_id"],
         author_role=record["author_role"],
+        author_shop_name=record.get("author_shop_name", ""),
         language_code=record["language_code"],
         media_items=media_items,
         description=record["description"],
@@ -248,7 +250,12 @@ async def set_moderation_message(post_id: UUID, chat_id: int, message_id: int) -
 async def get_post(post_id: UUID) -> QueuedPost | None:
     """Возвращает пост по идентификатору."""
     record = await _get_pool().fetchrow(
-        "SELECT * FROM post_queue WHERE id = $1",
+        """
+        SELECT pq.*, u.shop_name AS author_shop_name
+        FROM post_queue pq
+        JOIN users u ON u.telegram_id = pq.author_telegram_id
+        WHERE pq.id = $1
+        """,
         post_id,
     )
     return _record_to_post(record) if record is not None else None
@@ -266,7 +273,12 @@ async def approve_post(post_id: UUID, scheduled_at: datetime) -> QueuedPost | No
             last_error = NULL
         WHERE id = $1
           AND status = 'pending_moderation'
-        RETURNING *
+        RETURNING (
+            SELECT row(pq.*, u.shop_name)
+            FROM post_queue pq
+            JOIN users u ON u.telegram_id = pq.author_telegram_id
+            WHERE pq.id = post_queue.id
+        ).*
         """,
         post_id,
         scheduled_at,
@@ -284,7 +296,12 @@ async def update_pending_post_text(post_id: UUID, description: str, post_text: s
             updated_at = NOW()
         WHERE id = $1
           AND status = 'pending_moderation'
-        RETURNING *
+        RETURNING (
+            SELECT row(pq.*, u.shop_name)
+            FROM post_queue pq
+            JOIN users u ON u.telegram_id = pq.author_telegram_id
+            WHERE pq.id = post_queue.id
+        ).*
         """,
         post_id,
         description,
@@ -311,7 +328,12 @@ async def claim_next_queued_post() -> QueuedPost | None:
             updated_at = NOW()
         FROM candidate
         WHERE queue.id = candidate.id
-        RETURNING queue.*
+        RETURNING (
+            SELECT row(pq.*, u.shop_name)
+            FROM post_queue pq
+            JOIN users u ON u.telegram_id = pq.author_telegram_id
+            WHERE pq.id = queue.id
+        ).*
         """
     )
     return _record_to_post(record) if record is not None else None
@@ -397,7 +419,12 @@ async def claim_post_for_duplicate(post_id: UUID) -> QueuedPost | None:
         WHERE id = $1
           AND status = 'published'
           AND duplicate_due_at <= NOW()
-        RETURNING *
+        RETURNING (
+            SELECT row(pq.*, u.shop_name)
+            FROM post_queue pq
+            JOIN users u ON u.telegram_id = pq.author_telegram_id
+            WHERE pq.id = post_queue.id
+        ).*
         """,
         post_id,
     )
@@ -440,3 +467,89 @@ async def mark_duplicate_failed(post_id: UUID, error_message: str) -> None:
         post_id,
         error_message[:_ERROR_MESSAGE_LIMIT],
     )
+
+
+async def get_user_shop_name(telegram_id: int) -> str | None:
+    """Возвращает shop_name пользователя или None если не установлен."""
+    return await _get_pool().fetchval(
+        "SELECT shop_name FROM users WHERE telegram_id = $1",
+        telegram_id,
+    )
+
+
+async def assign_shop_name_on_registration(telegram_id: int) -> str:
+    """Присваивает новый shop_name при регистрации через автоинкремент."""
+    shop_number = await _get_pool().fetchval("SELECT nextval('shop_counter')")
+    shop_name = f"Shop {shop_number}"
+    await _get_pool().execute(
+        "UPDATE users SET shop_name = $2 WHERE telegram_id = $1",
+        telegram_id,
+        shop_name,
+    )
+    return shop_name
+
+
+async def set_user_trusted_seller(telegram_id: int) -> bool:
+    """Назначает пользователю роль trusted_seller. Возвращает True если пользователь найден."""
+    result = await _get_pool().execute(
+        "UPDATE users SET role = 'trusted_seller' WHERE telegram_id = $1",
+        telegram_id,
+    )
+    return result != "UPDATE 0"
+
+
+async def get_user_by_shop_name(shop_name: str) -> int | None:
+    """Возвращает telegram_id пользователя по имени магазина."""
+    return await _get_pool().fetchval(
+        "SELECT telegram_id FROM users WHERE shop_name = $1",
+        shop_name,
+    )
+
+
+async def reject_post(post_id: UUID) -> tuple[int, str] | None:
+    """Отклоняет пост модерации и возвращает (author_telegram_id, shop_name) для уведомления."""
+    record = await _get_pool().fetchrow(
+        """
+        UPDATE post_queue
+        SET status = 'rejected',
+            updated_at = NOW()
+        WHERE id = $1
+          AND status = 'pending_moderation'
+        RETURNING author_telegram_id, (
+            SELECT shop_name FROM users WHERE telegram_id = post_queue.author_telegram_id
+        ) AS shop_name
+        """,
+        post_id,
+    )
+    if record is not None:
+        return (record["author_telegram_id"], record["shop_name"] or "")
+    return None
+
+async def set_user_admin(telegram_id: int) -> bool:
+    """Назначает пользователю роль admin. Возвращает True если пользователь найден."""
+    result = await _get_pool().execute(
+        "UPDATE users SET role = 'admin' WHERE telegram_id = $1",
+        telegram_id,
+    )
+    return result != "UPDATE 0"
+
+
+async def get_user_role(telegram_id: int) -> str | None:
+    """Возвращает роль пользователя из БД или None если не найден."""
+    return await _get_pool().fetchval(
+        "SELECT role FROM users WHERE telegram_id = $1",
+        telegram_id,
+    )
+
+
+async def get_all_admins() -> list[tuple[int, str, str | None]]:
+    """Возвращает список всех админов и супер-админов: (telegram_id, role, shop_name)."""
+    records = await _get_pool().fetch(
+        """
+        SELECT telegram_id, role, shop_name
+        FROM users
+        WHERE role IN ('admin', 'super_admin')
+        ORDER BY role DESC, telegram_id
+        """
+    )
+    return [(r["telegram_id"], r["role"], r["shop_name"]) for r in records]

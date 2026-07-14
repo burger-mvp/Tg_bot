@@ -5,6 +5,7 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
 )
 
 from locales import t
@@ -15,6 +16,10 @@ LANGUAGE_KEYBOARD = InlineKeyboardMarkup(
         [InlineKeyboardButton(text="🇷🇺 Русский", callback_data="language:ru")],
         [InlineKeyboardButton(text="🇬🇧 English", callback_data="language:en")],
         [InlineKeyboardButton(text="🇸🇦 العربية", callback_data="language:ar")],
+        [InlineKeyboardButton(text="🇦🇫 دری", callback_data="language:fa")],
+        [InlineKeyboardButton(text="🇵🇰 اردو", callback_data="language:ur")],
+        [InlineKeyboardButton(text="🇮🇳 हिन्दी", callback_data="language:hi")],
+        [InlineKeyboardButton(text="🇧🇩 বাংলা", callback_data="language:bn")],
     ]
 )
 
@@ -22,7 +27,7 @@ LANGUAGE_KEYBOARD = InlineKeyboardMarkup(
 def main_menu(role: str, language_code: str) -> ReplyKeyboardMarkup:
     """Создает главное Reply-меню с учетом языка и роли пользователя."""
     buttons = [[KeyboardButton(text=t(language_code, "create_post"))]]
-    if role != "user":
+    if role != "user" and role != "trusted_seller":
         buttons.append([KeyboardButton(text=t(language_code, "admin_panel"))])
     if role == "super_admin":
         buttons.append([KeyboardButton(text=t(language_code, "super_admin_panel"))])
@@ -48,13 +53,14 @@ def cancel_keyboard(language_code: str) -> InlineKeyboardMarkup:
     )
 
 
-def media_step_keyboard(language_code: str) -> InlineKeyboardMarkup:
-    """Создает кнопки завершения загрузки видео и отмены сценария."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=t(language_code, "media_uploaded"), callback_data="post:media_done")],
-            [InlineKeyboardButton(text=t(language_code, "cancel"), callback_data="post:cancel")],
-        ]
+def media_step_keyboard(language_code: str) -> ReplyKeyboardMarkup:
+    """Создает Reply-клавиатуру с кнопкой завершения загрузки медиа внизу экрана."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=t(language_code, "media_uploaded"))],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=False,
     )
 
 
@@ -86,10 +92,21 @@ def engine_type_keyboard(language_code: str) -> InlineKeyboardMarkup:
 
 
 def moderation_keyboard(post_id: str, language_code: str) -> InlineKeyboardMarkup:
-    """Создает кнопки одобрения и правки поста для супер-администратора."""
+    """Создает кнопки одобрения, правки и отклонения поста для супер-администратора."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=t(language_code, "approve"), callback_data=f"moderation:approve:{post_id}")],
             [InlineKeyboardButton(text=t(language_code, "edit"), callback_data=f"moderation:edit:{post_id}")],
+            [InlineKeyboardButton(text=t(language_code, "reject"), callback_data=f"moderation:reject:{post_id}")],
+        ]
+    )
+
+
+def super_admin_menu_keyboard(language_code: str) -> InlineKeyboardMarkup:
+    """Создает дополнительное меню супер-администратора."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t(language_code, "set_trusted_seller"), callback_data="super_admin:set_trusted")],
+            [InlineKeyboardButton(text=t(language_code, "set_admin"), callback_data="super_admin:set_admin")],
         ]
     )

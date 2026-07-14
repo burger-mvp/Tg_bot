@@ -18,6 +18,8 @@ from database import (
     get_post,
     get_user_language,
     get_user_phone_number,
+    get_user_shop_name,
+    reject_post,
     set_moderation_message,
     update_pending_post_text,
 )
@@ -29,7 +31,7 @@ from keyboards import (
     moderation_keyboard,
 )
 from locales import SUPPORTED_LANGUAGE_CODES, normalize_language_code, t
-from roles import get_role, is_super_admin
+from roles import get_role, is_admin_or_higher, is_super_admin
 from scheduler.post_scheduler import next_publication_slot
 from utils.pricing import BODY_MARKUP, ENGINE_MARKUP, format_post_text, parse_aed_price, serialize_price
 from utils.publishing import send_queued_post
@@ -41,7 +43,14 @@ MAX_MEDIA_FILES: Final = 30
 MAX_MEDIA_FILE_SIZE_BYTES: Final = 20 * 1024 * 1024
 MAX_LOCAL_API_MEDIA_FILE_SIZE_BYTES: Final = 2_000 * 1_000_000
 MAX_DESCRIPTION_LENGTH: Final = 4_000
-CREATE_POST_TEXTS: Final = frozenset({"Создать пост", "Create post", "إنشاء منشور"})
+CREATE_POST_TEXTS: Final = frozenset({
+    "Создать пост", "Create post", "إنشاء منشور",
+    "پست ایجاد کریں", "پوسٹ بنائیں", "पोस्ट बनाएं", "পোস্ট তৈরি করুন"
+})
+MEDIA_DONE_TEXTS: Final = frozenset({
+    "Медиа загружены", "Media uploaded", "تم تحميل الوسائط",
+    "رسانه بارگذاری شد", "میڈیا اپ لوڈ ہو گیا", "मीडिया अपलोड हो गया", "মিডিয়া আপলোড করা হয়েছে"
+})
 
 
 class PostCreation(StatesGroup):
@@ -146,9 +155,11 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
         return
 
     role = get_role(message.from_user.id)
-    post_text = format_post_text(description, post_kind, price_data)
+    shop_name = await get_user_shop_name(message.from_user.id) or ""
+    post_text = format_post_text(description, post_kind, price_data, seller_name=shop_name)
     post_id = uuid4()
-    status = "queued" if role != "user" else "pending_moderation"
+    # Доверенные продавцы и администраторы публикуются без модерации
+    status = "queued" if role in ("admin", "super_admin", "trusted_seller") else "pending_moderation"
     try:
         await create_post(
             post_id=post_id,
@@ -169,7 +180,7 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
         return
     await state.clear()
 
-    if role != "user":
+    if status == "queued":
         await message.answer(t(language_code, "post_added_queue"))
         return
 
@@ -235,7 +246,7 @@ async def start_post_creation(message: Message, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(PostCreation.waiting_for_media)
     await state.update_data(language_code=language_code, media_items=[])
-    await message.answer(t(language_code, "send_videos"), reply_markup=media_step_keyboard(language_code))
+    await message.answer(t(language_code, "send_media"), reply_markup=media_step_keyboard(language_code))
 
 
 @router.message(PostCreation.waiting_for_media, F.video)
@@ -244,6 +255,16 @@ async def collect_video(message: Message, state: FSMContext) -> None:
     if message.video is None:
         return
     await _save_media_item(message, state, "video", message.video.file_id, message.video.file_size)
+
+
+@router.message(PostCreation.waiting_for_media, F.photo)
+async def collect_photo(message: Message, state: FSMContext) -> None:
+    """Добавляет фотографии в список медиа."""
+    if message.photo is None or not message.photo:
+        return
+    # Берём самое большое разрешение
+    largest_photo = message.photo[-1]
+    await _save_media_item(message, state, "photo", largest_photo.file_id, largest_photo.file_size)
 
 
 @router.message(PostCreation.waiting_for_media, F.document)
@@ -256,7 +277,7 @@ async def collect_video_document(message: Message, state: FSMContext) -> None:
     is_video_file = mime_type.startswith("video/") or filename.endswith((".mp4", ".mov", ".mkv", ".avi", ".webm"))
     if not is_video_file:
         language_code = await _language_from_state_or_database(message, state)
-        await message.answer(t(language_code, "send_video_only"), reply_markup=media_step_keyboard(language_code))
+        await message.answer(t(language_code, "send_media_only"), reply_markup=media_step_keyboard(language_code))
         return
     await _save_media_item(message, state, "document", message.document.file_id, message.document.file_size)
 
@@ -291,19 +312,18 @@ async def explain_media_outside_post_creation(message: Message, state: FSMContex
     await message.answer(t(language_code, "media_not_expected"))
 
 
-@router.callback_query(PostCreation.waiting_for_media, F.data == "post:media_done")
-async def finish_media_collection(callback: CallbackQuery, state: FSMContext) -> None:
+@router.message(PostCreation.waiting_for_media, F.text.in_(MEDIA_DONE_TEXTS))
+async def finish_media_collection(message: Message, state: FSMContext) -> None:
     """Завершает ручной сбор медиа и показывает выбор категории."""
-    if callback.message is None:
+    if message.from_user is None:
         return
     language_code = normalize_language_code((await state.get_data()).get("language_code"))
     media_items = (await state.get_data()).get("media_items")
     if not isinstance(media_items, list) or not media_items:
-        await callback.answer(t(language_code, "no_media"), show_alert=True)
+        await message.answer(t(language_code, "no_media"))
         return
-    await callback.answer()
     await state.set_state(PostCreation.waiting_for_category)
-    await callback.message.answer(t(language_code, "choose_category"), reply_markup=category_keyboard(language_code))
+    await message.answer(t(language_code, "choose_category"), reply_markup=category_keyboard(language_code))
 
 
 @router.callback_query(PostCreation.waiting_for_category, F.data == "post:category:engine")
@@ -498,8 +518,8 @@ def _post_id_from_callback(callback: CallbackQuery, action: str) -> UUID | None:
 
 
 async def _require_super_admin(callback: CallbackQuery) -> bool:
-    """Ограничивает модерацию единственным ID из SUPER_ADMIN_ID."""
-    if is_super_admin(callback.from_user.id):
+    """Ограничивает модерацию администраторами и супер-администратором."""
+    if await is_admin_or_higher(callback.from_user.id):
         return True
     await callback.answer(t("ru", "access_denied"), show_alert=True)
     return False
@@ -527,6 +547,41 @@ async def approve_moderated_post(callback: CallbackQuery) -> None:
         await callback.message.answer(t(post.language_code, "moderation_approved"))
 
 
+@router.callback_query(F.data.startswith("moderation:reject:"))
+async def reject_moderated_post(callback: CallbackQuery, bot: Bot) -> None:
+    """Отклоняет пост и уведомляет автора."""
+    if not await _require_super_admin(callback):
+        return
+    post_id = _post_id_from_callback(callback, "reject")
+    if post_id is None:
+        await callback.answer(t("ru", "already_moderated"), show_alert=True)
+        return
+    
+    result = await reject_post(post_id)
+    if result is None:
+        await callback.answer(t("ru", "already_moderated"), show_alert=True)
+        return
+    
+    author_telegram_id, shop_name = result
+    await callback.answer(t("ru", "post_rejected"))
+    if callback.message is not None:
+        try:
+            await callback.message.edit_reply_markup(reply_markup=None)
+        except TelegramBadRequest:
+            pass
+        await callback.message.answer(t("ru", "post_rejected"))
+    
+    # Уведомляем автора
+    author_language = await get_user_language(author_telegram_id) or "ru"
+    try:
+        await bot.send_message(
+            author_telegram_id,
+            t(author_language, "post_rejected_notification"),
+        )
+    except TelegramAPIError:
+        logger.warning("Не удалось уведомить автора %s об отклонении поста", author_telegram_id)
+
+
 @router.callback_query(F.data.startswith("moderation:edit:"))
 async def start_moderation_edit(callback: CallbackQuery, state: FSMContext) -> None:
     """Запрашивает у супер-администратора новое описание ожидающего поста."""
@@ -547,8 +602,8 @@ async def start_moderation_edit(callback: CallbackQuery, state: FSMContext) -> N
 
 @router.message(ModerationEdit.waiting_for_description, F.text)
 async def save_moderation_edit(message: Message, state: FSMContext, bot: Bot) -> None:
-    """Сохраняет новую редакцию и повторно показывает её супер-администратору."""
-    if message.from_user is None or not is_super_admin(message.from_user.id):
+    """Сохраняет новую редакцию и повторно показывает её администратору."""
+    if message.from_user is None or not await is_admin_or_higher(message.from_user.id):
         await state.clear()
         await message.answer(t("ru", "access_denied"))
         return
@@ -577,7 +632,7 @@ async def save_moderation_edit(message: Message, state: FSMContext, bot: Bot) ->
         await state.clear()
         await message.answer(t(language_code, "already_moderated"))
         return
-    post_text = format_post_text(description, original_post.post_kind, original_post.price_data)
+    post_text = format_post_text(description, original_post.post_kind, original_post.price_data, seller_name=original_post.author_shop_name)
     updated_post = await update_pending_post_text(post_id, description, post_text)
     await state.clear()
     if updated_post is None:

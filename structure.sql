@@ -1,11 +1,15 @@
+-- Счётчик для автоматической нумерации магазинов
+CREATE SEQUENCE IF NOT EXISTS shop_counter START WITH 1;
+
 -- Основные пользователи бота.
 CREATE TABLE IF NOT EXISTS users (
     telegram_id BIGINT PRIMARY KEY,
     phone_number TEXT,
     role VARCHAR(20) NOT NULL DEFAULT 'user'
-        CHECK (role IN ('user', 'admin', 'super_admin')),
-    language_code VARCHAR(2) CHECK (language_code IN ('ru', 'en', 'ar') OR language_code IS NULL),
-    registered_at TIMESTAMPTZ
+        CHECK (role IN ('user', 'admin', 'super_admin', 'trusted_seller')),
+    language_code VARCHAR(2) CHECK (language_code IN ('ru', 'en', 'ar', 'fa', 'ur', 'hi', 'bn') OR language_code IS NULL),
+    registered_at TIMESTAMPTZ,
+    shop_name TEXT
 );
 
 -- Очередь модерации, отложенных публикаций и повторов через семь дней.
@@ -14,9 +18,9 @@ CREATE TABLE IF NOT EXISTS post_queue (
     id UUID PRIMARY KEY,
     author_telegram_id BIGINT NOT NULL REFERENCES users (telegram_id),
     author_role VARCHAR(20) NOT NULL
-        CHECK (author_role IN ('user', 'admin', 'super_admin')),
-    language_code VARCHAR(2) NOT NULL CHECK (language_code IN ('ru', 'en', 'ar')),
-    -- Элементы: {"type": "video" | "document", "file_id": "..."}.
+        CHECK (author_role IN ('user', 'admin', 'super_admin', 'trusted_seller')),
+    language_code VARCHAR(2) NOT NULL CHECK (language_code IN ('ru', 'en', 'ar', 'fa', 'ur', 'hi', 'bn')),
+    -- Элементы: {"type": "video" | "document" | "photo", "file_id": "..."}.
     media_file_ids JSONB NOT NULL CHECK (jsonb_typeof(media_file_ids) = 'array'),
     description TEXT NOT NULL,
     post_kind VARCHAR(32) NOT NULL
@@ -24,7 +28,7 @@ CREATE TABLE IF NOT EXISTS post_queue (
     price_data JSONB NOT NULL CHECK (jsonb_typeof(price_data) = 'object'),
     post_text TEXT NOT NULL,
     status VARCHAR(32) NOT NULL
-        CHECK (status IN ('pending_moderation', 'queued', 'publishing', 'published', 'duplicate_publishing')),
+        CHECK (status IN ('pending_moderation', 'queued', 'publishing', 'published', 'duplicate_publishing', 'rejected')),
     approved_at TIMESTAMPTZ,
     scheduled_at TIMESTAMPTZ NOT NULL,
     published_at TIMESTAMPTZ,
