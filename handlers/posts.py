@@ -132,7 +132,10 @@ async def _save_media_item(
 
     media_items.append({"type": media_type, "file_id": file_id})
     await state.update_data(media_items=media_items)
-    await message.answer(t(language_code, "media_saved", count=len(media_items), max_count=MAX_MEDIA_FILES))
+    await message.answer(
+        t(language_code, "media_saved", count=len(media_items), max_count=MAX_MEDIA_FILES),
+        reply_markup=media_step_keyboard(language_code),
+    )
 
 
 async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, description: str) -> None:
