@@ -11,7 +11,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
-from config import SUPER_ADMIN_ID, TELEGRAM_API_SERVER_URL
+from config import TELEGRAM_API_SERVER_URL
+from roles import notification_recipient_ids
 from database import (
     approve_post,
     create_post,
@@ -194,19 +195,24 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
         await message.answer(t(language_code, "moderation_delivery_failed"))
         return
     try:
-        await bot.send_message(
-            SUPER_ADMIN_ID,
-            t(language_code, "moderation_request", author_id=message.from_user.id),
-        )
-        moderation_messages = await send_queued_post(
-            bot,
-            SUPER_ADMIN_ID,
-            post,
-            text_reply_markup=moderation_keyboard(str(post_id), language_code),
-        )
-        moderation_message = moderation_messages[0]
-        await set_moderation_message(post_id, moderation_message.chat.id, moderation_message.message_id)
-    except TelegramAPIError:
+        # Отправляем уведомление всем супер-админам
+        for admin_id in notification_recipient_ids():
+            try:
+                await bot.send_message(
+                    admin_id,
+                    t(language_code, "moderation_request", author_id=message.from_user.id),
+                )
+                moderation_messages = await send_queued_post(
+                    bot,
+                    admin_id,
+                    post,
+                    text_reply_markup=moderation_keyboard(str(post_id), language_code),
+                )
+                moderation_message = moderation_messages[0]
+                await set_moderation_message(post_id, moderation_message.chat.id, moderation_message.message_id)
+            except TelegramAPIError:
+                logger.exception("Не удалось отправить модерацию админу %s", admin_id)
+    except Exception:
         await message.answer(t(language_code, "moderation_delivery_failed"))
         return
 
@@ -639,23 +645,28 @@ async def save_moderation_edit(message: Message, state: FSMContext, bot: Bot) ->
         await message.answer(t(language_code, "already_moderated"))
         return
     try:
-        await bot.send_message(
-            SUPER_ADMIN_ID,
-            t(updated_post.language_code, "moderation_request", author_id=updated_post.author_telegram_id),
-        )
-        moderation_messages = await send_queued_post(
-            bot,
-            SUPER_ADMIN_ID,
-            updated_post,
-            text_reply_markup=moderation_keyboard(str(updated_post.id), updated_post.language_code),
-        )
-        moderation_message = moderation_messages[0]
-        await set_moderation_message(
-            updated_post.id,
-            moderation_message.chat.id,
-            moderation_message.message_id,
-        )
-    except TelegramAPIError:
+        # Отправляем обновленный пост на модерацию всем супер-админам
+        for admin_id in notification_recipient_ids():
+            try:
+                await bot.send_message(
+                    admin_id,
+                    t(updated_post.language_code, "moderation_request", author_id=updated_post.author_telegram_id),
+                )
+                moderation_messages = await send_queued_post(
+                    bot,
+                    admin_id,
+                    updated_post,
+                    text_reply_markup=moderation_keyboard(str(updated_post.id), updated_post.language_code),
+                )
+                moderation_message = moderation_messages[0]
+                await set_moderation_message(
+                    updated_post.id,
+                    moderation_message.chat.id,
+                    moderation_message.message_id,
+                )
+            except TelegramAPIError:
+                logger.exception("Не удалось отправить обновленную модерацию админу %s", admin_id)
+    except Exception:
         await message.answer(t(language_code, "moderation_delivery_failed"))
         return
     await message.answer(t(updated_post.language_code, "post_updated"))
