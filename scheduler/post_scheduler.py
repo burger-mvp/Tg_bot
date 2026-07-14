@@ -126,6 +126,8 @@ class PostScheduler:
             # В этом случае запускаем повтор сразу после старта, не теряя публикацию.
             self.schedule_duplicate(post_id, max(duplicate_due_at, now))
         self._scheduler.start()
+        if TEST_MODE:
+            await self.publish_next_post()
 
     def shutdown(self) -> None:
         """Останавливает планировщик без ожидания уже несуществующих задач."""

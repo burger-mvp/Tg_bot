@@ -51,9 +51,9 @@ except ValueError as error:
     raise RuntimeError("CHANNEL_ID должен быть целым числом.") from error
 
 try:
-    TEST_CHANNEL_ID = int(os.getenv("TEST_CHANNEL_ID", str(CHANNEL_ID)))
+    TEST_CHANNEL_ID = int(os.getenv("TEST_CHANNEL_ID") or os.getenv("TEST_CHAT") or str(CHANNEL_ID))
 except ValueError as error:
-    raise RuntimeError("TEST_CHANNEL_ID должен быть целым числом.") from error
+    raise RuntimeError("TEST_CHANNEL_ID или TEST_CHAT должен быть целым числом.") from error
 
 SUPER_ADMIN_IDS = _parse_admin_ids(_required_value("SUPER_ADMIN_IDS"))
 ADMIN_IDS = _parse_admin_ids(_required_value("ADMIN_IDS"))
