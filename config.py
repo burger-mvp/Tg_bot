@@ -46,11 +46,11 @@ TOKEN = _required_value("TOKEN")
 DATABASE_URL = _required_value("DATABASE_URL")
 
 try:
-    SUPER_ADMIN_ID = int(_required_value("SUPER_ADMIN_ID"))
     CHANNEL_ID = int(_required_value("CHANNEL_ID"))
 except ValueError as error:
-    raise RuntimeError("SUPER_ADMIN_ID и CHANNEL_ID должны быть целыми числами.") from error
+    raise RuntimeError("CHANNEL_ID должен быть целым числом.") from error
 
+SUPER_ADMIN_IDS = _parse_admin_ids(_required_value("SUPER_ADMIN_IDS"))
 ADMIN_IDS = _parse_admin_ids(_required_value("ADMIN_IDS"))
 TEST_MODE = _parse_bool("TEST_MODE")
 TELEGRAM_API_SERVER_URL = os.getenv("TELEGRAM_API_SERVER_URL", "").strip().rstrip("/") or None
