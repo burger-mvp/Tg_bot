@@ -219,17 +219,18 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
         return
     try:
         # Отправляем уведомление только супер-админам
+        admin_language_code = "ru"
         for admin_id in super_admin_ids():
             try:
                 await bot.send_message(
                     admin_id,
-                    t(language_code, "moderation_request", author_id=message.from_user.id),
+                    t(admin_language_code, "moderation_request", author_id=message.from_user.id),
                 )
                 moderation_messages = await send_queued_post(
                     bot,
                     admin_id,
                     post,
-                    text_reply_markup=moderation_keyboard(str(post_id), language_code),
+                    text_reply_markup=moderation_keyboard(str(post_id), admin_language_code),
                 )
                 moderation_message = moderation_messages[-1]
                 await set_moderation_message(post_id, moderation_message.chat.id, moderation_message.message_id)
@@ -601,21 +602,18 @@ async def approve_moderated_post(callback: CallbackQuery, bot: Bot) -> None:
             await send_queued_post(bot, publication_channel_id(), post)
             await mark_post_published_without_duplicate(post.id)
 
-        await callback.answer(t(post.language_code, "moderation_approved"))
+        admin_language_code = "ru"
+        await callback.answer(t(admin_language_code, "moderation_approved"))
         answered = True
         if callback.message is not None:
             try:
                 await callback.message.edit_reply_markup(reply_markup=None)
             except TelegramBadRequest:
                 pass
-            await callback.message.answer(t(post.language_code, "moderation_approved"))
+            await callback.message.answer(t(admin_language_code, "moderation_approved"))
     except Exception as error:
         logger.exception("Не удалось одобрить пост по callback %s", callback.data)
         language_code = "ru"
-        if post_id is not None:
-            failed_post = await get_post(post_id)
-            if failed_post is not None:
-                language_code = failed_post.language_code
         if not answered:
             await callback.answer(t(language_code, "moderation_approve_failed"), show_alert=True)
             answered = True
@@ -673,13 +671,13 @@ async def start_moderation_edit(callback: CallbackQuery, state: FSMContext) -> N
         return
     await state.clear()
     await state.set_state(ModerationEdit.waiting_for_description)
-    await state.update_data(post_id=str(post.id), language_code=post.language_code)
+    await state.update_data(post_id=str(post.id), language_code="ru")
     await callback.answer()
     if callback.message is not None:
         escaped_description = html.escape(post.description)
         await callback.message.answer(
-            t(post.language_code, "edit_prompt_with_description", description=escaped_description),
-            reply_markup=cancel_keyboard(post.language_code),
+            t("ru", "edit_prompt_with_description", description=escaped_description),
+            reply_markup=cancel_keyboard("ru"),
             parse_mode="HTML",
         )
 
@@ -730,12 +728,12 @@ async def save_moderation_edit(message: Message, state: FSMContext, bot: Bot) ->
         return
     try:
         # Сразу показываем обновленный пост админу, который редактировал описание.
-        await message.answer(t(updated_post.language_code, "post_updated"))
+        await message.answer(t("ru", "post_updated"))
         moderation_messages = await send_queued_post(
             bot,
             message.chat.id,
             updated_post,
-            text_reply_markup=moderation_keyboard(str(updated_post.id), updated_post.language_code),
+            text_reply_markup=moderation_keyboard(str(updated_post.id), "ru"),
         )
         moderation_message = moderation_messages[-1]
         await set_moderation_message(
@@ -749,13 +747,13 @@ async def save_moderation_edit(message: Message, state: FSMContext, bot: Bot) ->
             try:
                 await bot.send_message(
                     admin_id,
-                    t(updated_post.language_code, "moderation_request", author_id=updated_post.author_telegram_id),
+                    t("ru", "moderation_request", author_id=updated_post.author_telegram_id),
                 )
                 other_messages = await send_queued_post(
                     bot,
                     admin_id,
                     updated_post,
-                    text_reply_markup=moderation_keyboard(str(updated_post.id), updated_post.language_code),
+                    text_reply_markup=moderation_keyboard(str(updated_post.id), "ru"),
                 )
                 other_message = other_messages[-1]
                 await set_moderation_message(

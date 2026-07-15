@@ -6,7 +6,7 @@ from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from keyboards import main_menu, media_step_keyboard, start_keyboard
+from keyboards import main_menu, media_step_keyboard, moderation_keyboard, start_keyboard
 from locales import t
 from scheduler.post_scheduler import next_publication_slot
 from scheduler.post_scheduler import (
@@ -137,6 +137,8 @@ def test_main_menus_and_localization() -> None:
     ]
     assert media_step_keyboard("ru").keyboard[0][0].text == "✅ Медиа загружены"
     assert start_keyboard("ru").keyboard[0][0].text == "🚀 Начать"
+    moderation_buttons = [row[0].text for row in moderation_keyboard("post-id", "ru").inline_keyboard]
+    assert moderation_buttons == ["✅ Выложить", "✏️ Редактировать", "🚫 Отклонить"]
     assert t("ru", "engine") == "Двигатель / ДВС"
     assert t("ru", "engine_with_transmission") == "Двигатель с КПП"
     queue_status = t("ru", "queue_status", total=0, queued=0, published=0, waiting_duplicate=0)
@@ -227,16 +229,17 @@ def test_prices_text_and_slots() -> None:
     assert isinstance(publication_channel_id(), int)
 
 
-def test_queue_statistics_counts_future_duplicates() -> None:
-    """Статистика очереди должна считать будущие незавершенные дубли."""
+def test_queue_statistics_counts_first_publication_and_duplicates_separately() -> None:
+    """Статистика очереди должна разделять первую публикацию и дубли."""
     database_source = Path("database.py").read_text(encoding="utf-8")
-    assert "duplicate_due_at > NOW()" in database_source
+    assert "COUNT(*) FILTER (WHERE status = 'queued') as total" in database_source
     assert "status IN ('published', 'duplicate_publishing')" in database_source
+    assert "duplicate_due_at > NOW()" not in database_source
 
 
 if __name__ == "__main__":
     test_main_menus_and_localization()
     test_prices_text_and_slots()
-    test_queue_statistics_counts_future_duplicates()
+    test_queue_statistics_counts_first_publication_and_duplicates_separately()
     asyncio.run(test_video_chunks())
     print("Smoke checks passed.")
