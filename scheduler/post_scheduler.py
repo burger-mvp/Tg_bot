@@ -29,7 +29,7 @@ from utils.publishing import send_queued_post
 
 logger = logging.getLogger(__name__)
 WORKDAY_START = time(hour=9)
-WORKDAY_END = time(hour=22)
+WORKDAY_END = time(hour=22, minute=30)
 SLOT_INTERVAL = timedelta(minutes=30)
 DUPLICATE_RETRY_DELAY = timedelta(minutes=5)
 TEST_QUEUE_INTERVAL = timedelta(minutes=1)
@@ -53,12 +53,12 @@ def duplicate_delay() -> timedelta:
 
 
 def next_publication_slot(now: datetime | None = None) -> datetime:
-    """Возвращает ближайший слот: каждую минуту в тесте, иначе по рабочему графику."""
+    """Возвращает ближайший слот от текущего времени без учета уже занятой очереди."""
     current = now.astimezone(SCHEDULER_TIMEZONE) if now else datetime.now(SCHEDULER_TIMEZONE)
     if TEST_MODE:
         return current.replace(second=0, microsecond=0) + TEST_QUEUE_INTERVAL
     day_start = current.replace(hour=WORKDAY_START.hour, minute=0, second=0, microsecond=0)
-    day_end = current.replace(hour=WORKDAY_END.hour, minute=0, second=0, microsecond=0)
+    day_end = current.replace(hour=WORKDAY_END.hour, minute=WORKDAY_END.minute, second=0, microsecond=0)
 
     if current < day_start:
         return day_start
@@ -75,6 +75,27 @@ def next_publication_slot(now: datetime | None = None) -> datetime:
     if candidate > day_end:
         return day_start + timedelta(days=1)
     return candidate
+
+
+def next_free_publication_slot(
+    last_scheduled_at: datetime | None,
+    now: datetime | None = None,
+) -> datetime:
+    """Возвращает следующий свободный слот после хвоста очереди."""
+    if last_scheduled_at is None:
+        return next_publication_slot(now)
+
+    next_slot = last_scheduled_at.astimezone(SCHEDULER_TIMEZONE) + queue_slot_interval()
+    day_start = next_slot.replace(hour=WORKDAY_START.hour, minute=0, second=0, microsecond=0)
+    day_end = next_slot.replace(
+        hour=WORKDAY_END.hour,
+        minute=WORKDAY_END.minute,
+        second=0,
+        microsecond=0,
+    )
+    if next_slot < day_start or next_slot > day_end:
+        return day_start + timedelta(days=1)
+    return next_slot
 
 
 class PostScheduler:
@@ -106,16 +127,8 @@ class PostScheduler:
         else:
             self._scheduler.add_job(
                 self.publish_next_post,
-                CronTrigger(hour="9-21", minute="0,30", timezone=SCHEDULER_TIMEZONE),
+                CronTrigger(hour="9-22", minute="0,30", timezone=SCHEDULER_TIMEZONE),
                 id="publish_queue_half_hour_slots",
-                replace_existing=True,
-                coalesce=True,
-                max_instances=1,
-            )
-            self._scheduler.add_job(
-                self.publish_next_post,
-                CronTrigger(hour="22", minute="0", timezone=SCHEDULER_TIMEZONE),
-                id="publish_queue_last_slot",
                 replace_existing=True,
                 coalesce=True,
                 max_instances=1,

@@ -18,6 +18,7 @@ from database import (
     approve_post,
     approve_post_for_immediate_publication,
     create_post,
+    get_last_queued_scheduled_at,
     get_post,
     get_user_language,
     get_user_phone_number,
@@ -37,7 +38,7 @@ from keyboards import (
 )
 from locales import SUPPORTED_LANGUAGE_CODES, normalize_language_code, t
 from roles import get_role_from_db_or_config, is_super_admin
-from scheduler.post_scheduler import next_publication_slot, publication_channel_id
+from scheduler.post_scheduler import next_free_publication_slot, publication_channel_id
 from utils.pricing import BODY_MARKUP, ENGINE_MARKUP, format_post_text, parse_aed_price, serialize_price
 from utils.publishing import send_queued_post
 
@@ -573,7 +574,10 @@ async def approve_moderated_post(callback: CallbackQuery, bot: Bot) -> None:
             return
 
         if pending_post.author_telegram_id in KM_LOGISTICS_IDS:
-            post = await approve_post(post_id, next_publication_slot())
+            post = await approve_post(
+                post_id,
+                next_free_publication_slot(await get_last_queued_scheduled_at()),
+            )
         else:
             post = await approve_post_for_immediate_publication(post_id)
         if post is None:

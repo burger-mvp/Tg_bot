@@ -334,6 +334,19 @@ async def get_post(post_id: UUID) -> QueuedPost | None:
     return _record_to_post(record) if record is not None else None
 
 
+async def get_last_queued_scheduled_at() -> datetime | None:
+    """Возвращает самый поздний занятый слот активной очереди."""
+    return await _get_pool().fetchval(
+        """
+        SELECT scheduled_at
+        FROM post_queue
+        WHERE status = 'queued'
+        ORDER BY scheduled_at DESC
+        LIMIT 1
+        """
+    )
+
+
 async def approve_post(post_id: UUID, scheduled_at: datetime) -> QueuedPost | None:
     """Переводит ожидающий модерации пост в очередь публикаций."""
     record = await _get_pool().fetchrow(
