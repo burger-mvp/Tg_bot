@@ -617,7 +617,7 @@ async def get_user_shop_name(telegram_id: int) -> str | None:
 async def assign_shop_name_on_registration(telegram_id: int) -> str:
     """Присваивает новый shop_name при регистрации через автоинкремент."""
     if telegram_id in KM_LOGISTICS_IDS:
-        shop_name = "KM.Logistics"
+        shop_name = "KM-Logistics"
         await _get_pool().execute(
             "UPDATE users SET shop_name = $2 WHERE telegram_id = $1",
             telegram_id,

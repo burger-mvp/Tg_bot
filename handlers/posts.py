@@ -567,7 +567,7 @@ async def _require_super_admin(callback: CallbackQuery) -> bool:
 
 @router.callback_query(F.data.startswith("moderation:approve:"))
 async def approve_moderated_post(callback: CallbackQuery, bot: Bot) -> None:
-    """Одобряет пост: KM.Logistics ставит в очередь, остальных публикует сразу."""
+    """Одобряет пост: KM-Logistics ставит в очередь, остальных публикует сразу."""
     answered = False
     post_id: UUID | None = None
     try:
