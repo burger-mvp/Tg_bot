@@ -11,6 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import BufferedInputFile, Message
 
+from config import SCHEDULER_TIMEZONE
 from database import (
     find_user_for_role_assignment,
     get_all_users,
@@ -237,7 +238,7 @@ async def view_queue_status(message: Message, state: FSMContext) -> None:
                         "queue_list_item",
                         index=index,
                         shop_name=post.author_shop_name or "—",
-                        scheduled_at=post.scheduled_at.strftime("%d.%m %H:%M"),
+                        scheduled_at=post.scheduled_at.astimezone(SCHEDULER_TIMEZONE).strftime("%d.%m %H:%M"),
                         description=post.description[:80],
                     )
                 )

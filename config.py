@@ -29,6 +29,15 @@ def _parse_admin_ids(raw_ids: str) -> list[int]:
         raise RuntimeError("ADMIN_IDS должен содержать Telegram ID через запятую.") from error
 
 
+def _parse_optional_ids(name: str) -> list[int]:
+    """Преобразует необязательную переменную с Telegram ID через запятую."""
+    raw_ids = os.getenv(name, "")
+    try:
+        return [int(item.strip()) for item in raw_ids.split(",") if item.strip()]
+    except ValueError as error:
+        raise RuntimeError(f"{name} должен содержать Telegram ID через запятую.") from error
+
+
 def _parse_bool(name: str, default: bool = False) -> bool:
     """Читает булево значение окружения и отклоняет неоднозначные настройки."""
     raw_value = os.getenv(name)
@@ -57,6 +66,7 @@ except ValueError as error:
 
 SUPER_ADMIN_IDS = _parse_admin_ids(_required_value("SUPER_ADMIN_IDS"))
 ADMIN_IDS = _parse_admin_ids(_required_value("ADMIN_IDS"))
+KM_LOGISTICS_IDS = _parse_optional_ids("KM_LOGISTICS_IDS")
 TEST_MODE = _parse_bool("TEST_MODE")
 TELEGRAM_API_SERVER_URL = os.getenv("TELEGRAM_API_SERVER_URL", "").strip().rstrip("/") or None
 

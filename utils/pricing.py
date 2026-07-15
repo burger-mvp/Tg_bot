@@ -28,7 +28,7 @@ RU_FIXED_FOOTER: Final = """Все запчасти согласовываютс
 
 Наш канал на YouTube: https://www.youtube.com/@KppMotors
 
-Продавец: {seller_name}"""
+{seller_name}"""
 EN_FIXED_FOOTER: Final = """All parts are agreed with you online, which makes the process easier. ‼️
 
 Delivery terms:
@@ -46,7 +46,7 @@ To place an order or get advice, contact: ✏️
 
 Our YouTube channel: https://www.youtube.com/@KppMotors
 
-Seller: {seller_name}"""
+{seller_name}"""
 
 
 def round_price_up_to_tens(price: Decimal) -> int:

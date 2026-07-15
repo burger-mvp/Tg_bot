@@ -187,7 +187,8 @@ def test_prices_text_and_slots() -> None:
     caption = format_post_caption("😀" * 4_000, "engine_only", {"engine": {"usd": 110}})
     assert len(caption.encode("utf-16-le")) // 2 <= TELEGRAM_CAPTION_LIMIT
     assert "...\n\nЦена ДВС: $110 USD" in caption
-    assert caption.endswith("Продавец: —")
+    assert "Продавец:" not in caption
+    assert caption.endswith("—")
 
     moscow = ZoneInfo("Europe/Moscow")
     assert next_publication_slot(datetime(2026, 7, 13, 8, 29, tzinfo=moscow)).isoformat().startswith(

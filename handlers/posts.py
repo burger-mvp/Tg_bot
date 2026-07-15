@@ -12,15 +12,17 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
-from config import TELEGRAM_API_SERVER_URL, TEST_MODE
+from config import KM_LOGISTICS_IDS, TELEGRAM_API_SERVER_URL, TEST_MODE
 from roles import super_admin_ids
 from database import (
     approve_post,
+    approve_post_for_immediate_publication,
     create_post,
     get_post,
     get_user_language,
     get_user_phone_number,
     get_user_shop_name,
+    mark_post_published_without_duplicate,
     reject_post,
     set_moderation_message,
     update_pending_post_text,
@@ -35,7 +37,7 @@ from keyboards import (
 )
 from locales import SUPPORTED_LANGUAGE_CODES, normalize_language_code, t
 from roles import get_role_from_db_or_config, is_super_admin
-from scheduler.post_scheduler import next_publication_slot
+from scheduler.post_scheduler import next_publication_slot, publication_channel_id
 from utils.pricing import BODY_MARKUP, ENGINE_MARKUP, format_post_text, parse_aed_price, serialize_price
 from utils.publishing import send_queued_post
 
@@ -551,8 +553,8 @@ async def _require_super_admin(callback: CallbackQuery) -> bool:
 
 
 @router.callback_query(F.data.startswith("moderation:approve:"))
-async def approve_moderated_post(callback: CallbackQuery) -> None:
-    """Одобряет пост обычного пользователя и переносит его в очередь."""
+async def approve_moderated_post(callback: CallbackQuery, bot: Bot) -> None:
+    """Одобряет пост: KM.Logistics ставит в очередь, остальных публикует сразу."""
     answered = False
     post_id: UUID | None = None
     try:
@@ -564,11 +566,25 @@ async def approve_moderated_post(callback: CallbackQuery) -> None:
             await callback.answer(t("ru", "already_moderated"), show_alert=True)
             answered = True
             return
-        post = await approve_post(post_id, next_publication_slot())
+        pending_post = await get_post(post_id)
+        if pending_post is None or pending_post.status != "pending_moderation":
+            await callback.answer(t("ru", "already_moderated"), show_alert=True)
+            answered = True
+            return
+
+        if pending_post.author_telegram_id in KM_LOGISTICS_IDS:
+            post = await approve_post(post_id, next_publication_slot())
+        else:
+            post = await approve_post_for_immediate_publication(post_id)
         if post is None:
             await callback.answer(t("ru", "already_moderated"), show_alert=True)
             answered = True
             return
+
+        if post.author_telegram_id not in KM_LOGISTICS_IDS:
+            await send_queued_post(bot, publication_channel_id(), post)
+            await mark_post_published_without_duplicate(post.id)
+
         await callback.answer(t(post.language_code, "moderation_approved"))
         answered = True
         if callback.message is not None:

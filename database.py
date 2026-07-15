@@ -8,7 +8,7 @@ from uuid import UUID
 
 import asyncpg
 
-from config import DATABASE_URL
+from config import DATABASE_URL, KM_LOGISTICS_IDS
 
 
 _MIN_POOL_SIZE: Final = 1
@@ -359,6 +359,30 @@ async def approve_post(post_id: UUID, scheduled_at: datetime) -> QueuedPost | No
     return _record_to_post(record) if record is not None else None
 
 
+async def approve_post_for_immediate_publication(post_id: UUID) -> QueuedPost | None:
+    """Резервирует одобренный пост для мгновенной публикации без очереди."""
+    record = await _get_pool().fetchrow(
+        """
+        WITH updated AS (
+            UPDATE post_queue
+            SET status = 'publishing',
+                approved_at = NOW(),
+                scheduled_at = NOW(),
+                updated_at = NOW(),
+                last_error = NULL
+            WHERE id = $1
+              AND status = 'pending_moderation'
+            RETURNING *
+        )
+        SELECT updated.*, u.shop_name AS author_shop_name
+        FROM updated
+        JOIN users u ON u.telegram_id = updated.author_telegram_id
+        """,
+        post_id,
+    )
+    return _record_to_post(record) if record is not None else None
+
+
 async def update_pending_post_text(post_id: UUID, description: str, post_text: str) -> QueuedPost | None:
     """Сохраняет исправленное описание поста до его одобрения."""
     record = await _get_pool().fetchrow(
@@ -428,6 +452,23 @@ async def mark_post_published(post_id: UUID, duplicate_after: timedelta) -> date
         """,
         post_id,
         duplicate_after,
+    )
+
+
+async def mark_post_published_without_duplicate(post_id: UUID) -> None:
+    """Фиксирует мгновенную публикацию без постановки на повтор."""
+    await _get_pool().execute(
+        """
+        UPDATE post_queue
+        SET status = 'published',
+            published_at = NOW(),
+            duplicate_due_at = NULL,
+            updated_at = NOW(),
+            last_error = NULL
+        WHERE id = $1
+          AND status = 'publishing'
+        """,
+        post_id,
     )
 
 
@@ -578,6 +619,15 @@ async def get_user_shop_name(telegram_id: int) -> str | None:
 
 async def assign_shop_name_on_registration(telegram_id: int) -> str:
     """Присваивает новый shop_name при регистрации через автоинкремент."""
+    if telegram_id in KM_LOGISTICS_IDS:
+        shop_name = "KM.Logistics"
+        await _get_pool().execute(
+            "UPDATE users SET shop_name = $2 WHERE telegram_id = $1",
+            telegram_id,
+            shop_name,
+        )
+        return shop_name
+
     shop_number = await _get_pool().fetchval("SELECT nextval('shop_counter')")
     shop_name = f"Shop {shop_number}"
     await _get_pool().execute(
