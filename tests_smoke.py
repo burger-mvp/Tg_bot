@@ -26,6 +26,7 @@ from utils.pricing import (
     format_post_text,
     parse_aed_price,
 )
+from utils.premium_emoji import premium_emoji_html
 from utils.publishing import send_post_content
 
 
@@ -40,9 +41,10 @@ class FakeBot:
         chat_id: int,
         video: str,
         caption: str | None = None,
+        parse_mode: str | None = None,
         reply_markup: object | None = None,
     ) -> tuple[str, int, str, str | None]:
-        del reply_markup
+        del parse_mode, reply_markup
         result = ("video", chat_id, video, caption)
         self.calls.append(result)
         return result
@@ -52,9 +54,10 @@ class FakeBot:
         chat_id: int,
         photo: str,
         caption: str | None = None,
+        parse_mode: str | None = None,
         reply_markup: object | None = None,
     ) -> tuple[str, int, str, str | None]:
-        del reply_markup
+        del parse_mode, reply_markup
         result = ("photo", chat_id, photo, caption)
         self.calls.append(result)
         return result
@@ -70,9 +73,10 @@ class FakeBot:
         chat_id: int,
         document: str,
         caption: str | None = None,
+        parse_mode: str | None = None,
         reply_markup: object | None = None,
     ) -> tuple[str, int, str, str | None]:
-        del reply_markup
+        del parse_mode, reply_markup
         result = ("document", chat_id, document, caption)
         self.calls.append(result)
         return result
@@ -81,8 +85,10 @@ class FakeBot:
         self,
         chat_id: int,
         text: str,
+        parse_mode: str | None = None,
         reply_markup: object | None = None,
     ) -> tuple[str, int, str, bool]:
+        del parse_mode
         result = ("message", chat_id, text, reply_markup is not None)
         self.calls.append(result)
         return result
@@ -119,6 +125,16 @@ async def test_video_chunks() -> None:
         "text",
         text_reply_markup=object(),
     ) == [("group", 1, 2, "text", None), ("message", 1, "Управление постом:", True)]
+
+
+def test_premium_emoji_html() -> None:
+    """Премиум-эмодзи вставляются после безопасного HTML-экранирования."""
+    html_text = premium_emoji_html('🇦🇪 <test> ⚠️ & ✏️')
+    assert '<tg-emoji emoji-id="5445069334965657809">🇦🇪</tg-emoji>' in html_text
+    assert '<tg-emoji emoji-id="5420323339723881652">⚠️</tg-emoji>' in html_text
+    assert '<tg-emoji emoji-id="5395444784611480792">✏️</tg-emoji>' in html_text
+    assert "&lt;test&gt;" in html_text
+    assert " &amp; " in html_text
 
 
 def test_main_menus_and_localization() -> None:
@@ -245,6 +261,7 @@ def test_queue_statistics_counts_first_publication_and_duplicates_separately() -
 if __name__ == "__main__":
     test_main_menus_and_localization()
     test_prices_text_and_slots()
+    test_premium_emoji_html()
     test_queue_statistics_counts_first_publication_and_duplicates_separately()
     asyncio.run(test_video_chunks())
     print("Smoke checks passed.")

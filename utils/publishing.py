@@ -7,6 +7,7 @@ from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InputMediaPhoto, InputMediaVideo, Message
 
 from database import QueuedPost
+from utils.premium_emoji import premium_emoji_html
 from utils.pricing import format_post_caption
 
 
@@ -23,7 +24,7 @@ async def send_post_content(
     """Отправляет медиа с подписью у первого файла без отдельного текстового сообщения."""
     sent_messages: list[Message] = []
     media_buffer: list[dict[str, str]] = []
-    caption = post_text
+    caption = premium_emoji_html(post_text)
     caption_sent = False
     media_group_sent = False
     caption_message: Message | None = None
@@ -46,6 +47,7 @@ async def send_post_content(
                     chat_id,
                     photo=file_id,
                     caption=chunk_caption,
+                    parse_mode="HTML",
                     reply_markup=text_reply_markup if not caption_sent else None,
                 )
             elif item_type == "document":
@@ -53,6 +55,7 @@ async def send_post_content(
                     chat_id,
                     document=file_id,
                     caption=chunk_caption,
+                    parse_mode="HTML",
                     reply_markup=text_reply_markup if not caption_sent else None,
                 )
             else:  # video
@@ -60,6 +63,7 @@ async def send_post_content(
                     chat_id,
                     video=file_id,
                     caption=chunk_caption,
+                    parse_mode="HTML",
                     reply_markup=text_reply_markup if not caption_sent else None,
                 )
             sent_messages.append(message)
@@ -74,9 +78,9 @@ async def send_post_content(
                 item_caption = chunk_caption if index == 0 else None
                 
                 if item_type == "photo":
-                    media_group.append(InputMediaPhoto(media=file_id, caption=item_caption))
+                    media_group.append(InputMediaPhoto(media=file_id, caption=item_caption, parse_mode="HTML"))
                 else:  # video or document - treat as video in media group
-                    media_group.append(InputMediaVideo(media=file_id, caption=item_caption))
+                    media_group.append(InputMediaVideo(media=file_id, caption=item_caption, parse_mode="HTML"))
             
             messages = await bot.send_media_group(chat_id, media=media_group)
             sent_messages.extend(messages)
@@ -104,6 +108,7 @@ async def send_post_content(
             chat_id,
             document=file_id,
             caption=document_caption,
+            parse_mode="HTML",
             reply_markup=text_reply_markup if not caption_sent else None,
         )
         sent_messages.append(message)
@@ -115,7 +120,8 @@ async def send_post_content(
     if text_reply_markup is not None and media_group_sent:
         control_message = await bot.send_message(
             chat_id,
-            "Управление постом:",
+            premium_emoji_html("Управление постом:"),
+            parse_mode="HTML",
             reply_markup=text_reply_markup,
         )
         sent_messages.append(control_message)
