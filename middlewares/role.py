@@ -6,6 +6,7 @@ from typing import Any
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, User
 
+from database import display_name, update_user_profile
 from roles import get_role
 
 
@@ -21,4 +22,9 @@ class RoleMiddleware(BaseMiddleware):
         user = data.get("event_from_user")
         if isinstance(user, User):
             data["role"] = get_role(user.id)
+            await update_user_profile(
+                user.id,
+                user.username,
+                display_name(user.username, user.first_name, user.last_name),
+            )
         return await handler(event, data)

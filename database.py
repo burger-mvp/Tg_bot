@@ -60,10 +60,25 @@ async def _ensure_schema_updates(pool: asyncpg.Pool) -> None:
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT"
         )
         await connection.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT"
+        )
+        await connection.execute(
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ"
         )
         await connection.execute(
             "UPDATE users SET created_at = COALESCE(created_at, registered_at, NOW()) WHERE created_at IS NULL"
+        )
+        await connection.execute(
+            "UPDATE users SET username = COALESCE(NULLIF(username, ''), 'Нет юзернейма') WHERE username IS NULL OR username = ''"
+        )
+        await connection.execute(
+            "UPDATE users SET name = COALESCE(NULLIF(name, ''), NULLIF(username, ''), shop_name, 'Нет юзернейма') WHERE name IS NULL OR name = ''"
+        )
+        await connection.execute(
+            "UPDATE users SET language_code = 'en' WHERE language_code IS NOT NULL AND language_code NOT IN ('ru', 'en')"
+        )
+        await connection.execute(
+            "UPDATE post_queue SET language_code = 'ru' WHERE language_code NOT IN ('ru', 'en')"
         )
 
 
@@ -133,21 +148,52 @@ def _record_to_post(record: asyncpg.Record) -> QueuedPost:
     )
 
 
-async def upsert_user(telegram_id: int, role: str, language_code: str, username: str | None = None) -> None:
+def display_name(username: str | None, first_name: str | None = None, last_name: str | None = None) -> str:
+    """Возвращает понятную подпись пользователя для админки и экспорта."""
+    if username:
+        return f"@{username.lstrip('@')}"
+    full_name = " ".join(part for part in (first_name, last_name) if part).strip()
+    return full_name or "Нет юзернейма"
+
+
+async def upsert_user(
+    telegram_id: int,
+    role: str,
+    language_code: str,
+    username: str | None = None,
+    name: str | None = None,
+) -> None:
     """Создает пользователя или обновляет его актуальные роль и язык."""
     await _get_pool().execute(
         """
-        INSERT INTO users (telegram_id, role, language_code, username, created_at)
-        VALUES ($1, $2, $3, $4, NOW())
+        INSERT INTO users (telegram_id, role, language_code, username, name, created_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
         ON CONFLICT (telegram_id) DO UPDATE
         SET role = EXCLUDED.role,
             language_code = EXCLUDED.language_code,
-            username = EXCLUDED.username
+            username = EXCLUDED.username,
+            name = EXCLUDED.name
         """,
         telegram_id,
         role,
         language_code,
-        username,
+        username or "Нет юзернейма",
+        name or username or "Нет юзернейма",
+    )
+
+
+async def update_user_profile(telegram_id: int, username: str | None, name: str | None) -> None:
+    """Обновляет username/name при каждом взаимодействии, если пользователь уже есть в БД."""
+    await _get_pool().execute(
+        """
+        UPDATE users
+        SET username = $2,
+            name = $3
+        WHERE telegram_id = $1
+        """,
+        telegram_id,
+        username or "Нет юзернейма",
+        name or username or "Нет юзернейма",
     )
 
 
@@ -179,9 +225,9 @@ async def update_user_role(telegram_id: int, role: str) -> None:
 async def update_user_username(telegram_id: int, username: str | None) -> None:
     """Сохраняет актуальный username зарегистрированного пользователя."""
     await _get_pool().execute(
-        "UPDATE users SET username = $2 WHERE telegram_id = $1",
+        "UPDATE users SET username = $2, name = COALESCE(name, $2) WHERE telegram_id = $1",
         telegram_id,
-        username,
+        username or "Нет юзернейма",
     )
 
 
@@ -559,6 +605,35 @@ async def get_user_by_shop_name(shop_name: str) -> int | None:
     )
 
 
+async def find_user_for_role_assignment(query: str) -> dict[str, Any] | None:
+    """Ищет пользователя по Telegram ID, username, имени или shop_name."""
+    cleaned_query = query.strip()
+    if not cleaned_query:
+        return None
+    numeric_id: int | None = None
+    try:
+        numeric_id = int(cleaned_query)
+    except ValueError:
+        pass
+    username_query = cleaned_query.lstrip("@").lower()
+    record = await _get_pool().fetchrow(
+        """
+        SELECT telegram_id, username, name, shop_name, role
+        FROM users
+        WHERE ($1::bigint IS NOT NULL AND telegram_id = $1)
+           OR lower(regexp_replace(COALESCE(username, ''), '^@', '')) = $2
+           OR lower(COALESCE(name, '')) = lower($3)
+           OR lower(COALESCE(shop_name, '')) = lower($3)
+        ORDER BY telegram_id
+        LIMIT 1
+        """,
+        numeric_id,
+        username_query,
+        cleaned_query,
+    )
+    return dict(record) if record is not None else None
+
+
 async def reject_post(post_id: UUID) -> tuple[int, str] | None:
     """Удаляет отклоненный пост и возвращает его автора для уведомления."""
     record = await _get_pool().fetchrow(
@@ -654,6 +729,7 @@ async def get_all_users() -> list[dict[str, Any]]:
             language_code, 
             phone_number, 
             username,
+            name,
             shop_name, 
             created_at
         FROM users

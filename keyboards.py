@@ -14,11 +14,6 @@ LANGUAGE_KEYBOARD = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="🇷🇺 Русский", callback_data="language:ru")],
         [InlineKeyboardButton(text="🇬🇧 English", callback_data="language:en")],
-        [InlineKeyboardButton(text="🇸🇦 العربية", callback_data="language:ar")],
-        [InlineKeyboardButton(text="🇦🇫 دری", callback_data="language:fa")],
-        [InlineKeyboardButton(text="🇵🇰 اردو", callback_data="language:ur")],
-        [InlineKeyboardButton(text="🇮🇳 हिन्दी", callback_data="language:hi")],
-        [InlineKeyboardButton(text="🇧🇩 বাংলা", callback_data="language:bn")],
     ]
 )
 

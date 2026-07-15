@@ -107,25 +107,19 @@ def format_post_text(
     language_code: str = "ru",
 ) -> str:
     """Собирает итоговый текст в обязательном порядке: шапка, описание, цены, подвал с подписью продавца."""
-    is_russian = language_code == "ru"
     if post_kind == "engine_only":
-        label = "Цена ДВС" if is_russian else "Engine price"
-        price_lines = f"{label}: ${price_data['engine']['usd']} USD"
+        price_lines = f"Цена ДВС: ${price_data['engine']['usd']} USD"
     elif post_kind == "engine_with_transmission":
-        engine_label = "Цена только ДВС" if is_russian else "Engine only price"
-        set_label = "Цена ДВС с АКПП" if is_russian else "Engine with Gearbox price"
         price_lines = (
-            f"{engine_label}: ${price_data['engine']['usd']} USD\n"
-            f"{set_label}: ${price_data['engine_with_transmission']['usd']} USD"
+            f"Цена только ДВС: ${price_data['engine']['usd']} USD\n"
+            f"Цена ДВС с КПП: ${price_data['engine_with_transmission']['usd']} USD"
         )
     elif post_kind == "body":
-        label = "Цена" if is_russian else "Price"
-        price_lines = f"{label}: ${price_data['body']['usd']} USD"
+        price_lines = f"Цена: ${price_data['body']['usd']} USD"
     else:
         raise ValueError(f"Неизвестная категория поста: {post_kind}")
 
-    footer_template = RU_FIXED_FOOTER if is_russian else EN_FIXED_FOOTER
-    footer = footer_template.format(seller_name=seller_name or "—")
+    footer = RU_FIXED_FOOTER.format(seller_name=seller_name or "—")
     return f"{POST_HEADER}\n\n{description}\n\n{price_lines}\n\n{footer}"
 
 

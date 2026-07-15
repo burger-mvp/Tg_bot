@@ -12,6 +12,7 @@ from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 
 from database import (
     assign_shop_name_on_registration,
+    display_name,
     get_user_language,
     get_user_phone_number,
     save_phone_number_and_mark_registered,
@@ -28,7 +29,7 @@ router = Router(name=__name__)
 logger = logging.getLogger(__name__)
 MAX_PHONE_NUMBER_LENGTH: Final = 64
 START_REGISTRATION_TEXTS: Final = frozenset({
-    "🚀 Начать", "🚀 Start", "🚀 ابدأ", "🚀 شروع", "🚀 شروع کریں", "🚀 शुरू करें", "🚀 শুরু করুন",
+    "🚀 Начать", "🚀 Start",
 })
 
 
@@ -131,7 +132,13 @@ async def select_language(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     telegram_id = callback.from_user.id
     role = await get_role_from_db_or_config(telegram_id)
-    await upsert_user(telegram_id, role, language_code, callback.from_user.username)
+    await upsert_user(
+        telegram_id,
+        role,
+        language_code,
+        callback.from_user.username,
+        display_name(callback.from_user.username, callback.from_user.first_name, callback.from_user.last_name),
+    )
 
     await callback.answer(t(language_code, "language_saved"))
     await callback.message.edit_reply_markup(reply_markup=None)

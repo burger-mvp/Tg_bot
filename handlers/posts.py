@@ -389,7 +389,7 @@ async def select_engine_only(callback: CallbackQuery, state: FSMContext) -> None
 
 @router.callback_query(PostCreation.waiting_for_engine_type, F.data == "post:engine:transmission")
 async def select_engine_with_transmission(callback: CallbackQuery, state: FSMContext) -> None:
-    """Выбирает сценарий с ценами отдельного ДВС и ДВС с АКПП."""
+    """Выбирает сценарий с ценами отдельного ДВС и ДВС с КПП."""
     if callback.message is None:
         return
     language_code = normalize_language_code((await state.get_data()).get("language_code"))
@@ -423,7 +423,7 @@ async def receive_engine_price(message: Message, state: FSMContext) -> None:
 
 @router.message(PostCreation.waiting_for_transmission_price, F.text)
 async def receive_transmission_price(message: Message, state: FSMContext) -> None:
-    """Сохраняет вторую цену ДВС с АКПП, затем запрашивает описание."""
+    """Сохраняет вторую цену ДВС с КПП, затем запрашивает описание."""
     language_code = await _language_from_state_or_database(message, state)
     try:
         price = parse_aed_price(message.text or "")

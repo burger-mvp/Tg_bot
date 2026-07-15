@@ -68,13 +68,13 @@ RU_TEXTS = {
     "edit_prompt_with_description": "Пришлите исправленное описание. Вы можете скопировать текущее описание ниже: нажмите на него, вставьте в поле ввода, отредактируйте и отправьте мне. Видео/фото и рассчитанные цены останутся прежними.\n\n<code>{description}</code>",
     "post_updated": "Описание обновлено. Проверьте новую версию и выберите действие.",
     "set_trusted_seller": "🌟 Назначить доверенного продавца",
-    "enter_shop_name_for_trust": "Введите название магазина для назначения доверенной роли (например, Shop 1 или KM.Logistik):",
-    "shop_not_found": "Магазин с таким названием не найден в базе данных.",
-    "trusted_seller_assigned": "✅ Магазину {shop_name} присвоена роль доверенного продавца. Посты будут публиковаться без модерации.",
+    "enter_shop_name_for_trust": "Введите Telegram ID, @username, имя пользователя или название магазина (например, Shop 7):",
+    "shop_not_found": "Пользователь не найден. Введите Telegram ID, @username, имя или Shop из выгрузки users.",
+    "trusted_seller_assigned": "✅ Пользователь {user_label} успешно назначен Доверенным продавцом!",
     "set_admin": "👤 Назначить администратора",
-    "enter_telegram_id_for_admin": "Введите Telegram ID пользователя для назначения роли администратора:",
-    "admin_assigned": "✅ Пользователю {telegram_id} назначена роль администратора. Теперь он может модерировать посты.",
-    "user_not_found": "Пользователь с таким Telegram ID не найден в базе данных. Пользователь должен сначала пройти регистрацию через /start.",
+    "enter_telegram_id_for_admin": "Введите Telegram ID, @username, имя пользователя или название магазина (например, Shop 7):",
+    "admin_assigned": "✅ Пользователь {user_label} успешно назначен Администратором!",
+    "user_not_found": "Пользователь не найден. Введите Telegram ID, @username, имя или Shop из выгрузки users. Пользователь должен сначала пройти регистрацию через /start.",
     "view_queue": "📋 Просмотр очереди",
     "export_users": "📊 Выгрузить users",
     "queue_status": "📊 **Статус очереди публикаций**\n\n📝 Всего постов в очереди: {total}\n⏳ Ожидают публикации: {queued}\n✅ Опубликованы: {published}\n🔄 Ожидают дубликата: {waiting_duplicate}",
@@ -173,13 +173,13 @@ EN_TEXTS = {
     "edit_prompt_with_description": "Send the corrected description. You can copy the current description below: tap it, paste it into the input field, edit it and send it to me. Videos/photos and calculated prices will remain unchanged.\n\n<code>{description}</code>",
     "post_updated": "Description updated. Review the new version and choose an action.",
     "set_trusted_seller": "🌟 Assign trusted seller",
-    "enter_shop_name_for_trust": "Enter the shop name to assign trusted role (e.g., Shop 1 or KM.Logistik):",
-    "shop_not_found": "Shop with this name not found in the database.",
-    "trusted_seller_assigned": "✅ Shop {shop_name} has been assigned the trusted seller role. Posts will be published without moderation.",
+    "enter_shop_name_for_trust": "Enter Telegram ID, @username, user name or shop name (for example, Shop 7):",
+    "shop_not_found": "User not found. Enter Telegram ID, @username, name or Shop from the users export.",
+    "trusted_seller_assigned": "✅ User {user_label} has been successfully assigned as Trusted seller!",
     "set_admin": "👤 Assign administrator",
-    "enter_telegram_id_for_admin": "Enter the user's Telegram ID to assign administrator role:",
-    "admin_assigned": "✅ User {telegram_id} has been assigned the administrator role. They can now moderate posts.",
-    "user_not_found": "User with this Telegram ID not found in the database. The user must complete registration via /start first.",
+    "enter_telegram_id_for_admin": "Enter Telegram ID, @username, user name or shop name (for example, Shop 7):",
+    "admin_assigned": "✅ User {user_label} has been successfully assigned as Administrator!",
+    "user_not_found": "User not found. Enter Telegram ID, @username, name or Shop from the users export. The user must complete registration via /start first.",
     "view_queue": "📋 View queue",
     "export_users": "📊 Export users",
     "queue_status": "📊 **Publication queue status**\n\n📝 Total posts in queue: {total}\n⏳ Awaiting publication: {queued}\n✅ Published: {published}\n🔄 Awaiting duplicate: {waiting_duplicate}",
@@ -210,89 +210,3 @@ This bot helps auto parts sellers publish products to the channel.
 
 ❓ Questions? Contact @Kpp_Motors""",
 }
-
-# Для остальных языков используем английский как базу с изменёнными ключевыми фразами
-AR_TEXTS = EN_TEXTS.copy()
-AR_TEXTS.update({
-    "choose_language": "اختر لغة الواجهة:",
-    "create_post": "إنشاء منشور",
-    "start_registration": "🚀 ابدأ",
-    "start_prompt": "اضغط «🚀 ابدأ» لإكمال التسجيل.",
-    "admin_panel": "لوحة الإدارة",
-    "super_admin_panel": "لوحة المدير العام",
-    "engine": "Engine",
-    "body": "قطع الهيكل",
-    "cancel": "❌ إلغاء",
-    "media_uploaded": "✅ تم تحميل الوسائط",
-    "approve": "✅ نشر",
-    "edit": "✏️ تعديل",
-    "reject": "🚫 رفض",
-})
-
-FA_TEXTS = EN_TEXTS.copy()
-FA_TEXTS.update({
-    "choose_language": "زبان رابط انتخاب کنید:",
-    "create_post": "ایجاد پست",
-    "start_registration": "🚀 شروع",
-    "start_prompt": "برای تکمیل ثبت‌نام «🚀 شروع» را بزنید.",
-    "admin_panel": "پنل مدیریت",
-    "super_admin_panel": "پنل مدیر ارشد",
-    "engine": "Engine",
-    "body": "قطعات بدنه",
-    "cancel": "❌ لغو",
-    "media_uploaded": "✅ رسانه آپلود شد",
-    "approve": "✅ انتشار",
-    "edit": "✏️ ویرایش",
-    "reject": "🚫 رد",
-})
-
-UR_TEXTS = EN_TEXTS.copy()
-UR_TEXTS.update({
-    "choose_language": "انٹرفیس کی زبان منتخب کریں:",
-    "create_post": "پوسٹ بنائیں",
-    "start_registration": "🚀 شروع کریں",
-    "start_prompt": "رجسٹریشن مکمل کرنے کے لیے «🚀 شروع کریں» دبائیں۔",
-    "admin_panel": "ایڈمن پینل",
-    "super_admin_panel": "سپر ایڈمن پینل",
-    "engine": "Engine",
-    "body": "باڈی پارٹس",
-    "cancel": "❌ منسوخ کریں",
-    "media_uploaded": "✅ میڈیا اپ لوڈ ہوگیا",
-    "approve": "✅ شائع کریں",
-    "edit": "✏️ ترمیم کریں",
-    "reject": "🚫 مسترد کریں",
-})
-
-HI_TEXTS = EN_TEXTS.copy()
-HI_TEXTS.update({
-    "choose_language": "इंटरफ़ेस भाषा चुनें:",
-    "create_post": "पोस्ट बनाएं",
-    "start_registration": "🚀 शुरू करें",
-    "start_prompt": "पंजीकरण पूरा करने के लिए «🚀 शुरू करें» दबाएं।",
-    "admin_panel": "एडमिन पैनल",
-    "super_admin_panel": "सुपर एडमिन पैनल",
-    "engine": "Engine",
-    "body": "बॉडी पार्ट्स",
-    "cancel": "❌ रद्द करें",
-    "media_uploaded": "✅ मीडिया अपलोड हुआ",
-    "approve": "✅ प्रकाशित करें",
-    "edit": "✏️ संपादित करें",
-    "reject": "🚫 अस्वीकार करें",
-})
-
-BN_TEXTS = EN_TEXTS.copy()
-BN_TEXTS.update({
-    "choose_language": "ইন্টারফেস ভাষা নির্বাচন করুন:",
-    "create_post": "পোস্ট তৈরি করুন",
-    "start_registration": "🚀 শুরু করুন",
-    "start_prompt": "নিবন্ধন সম্পূর্ণ করতে «🚀 শুরু করুন» চাপুন।",
-    "admin_panel": "এডমিন প্যানেল",
-    "super_admin_panel": "সুপার এডমিন প্যানেল",
-    "engine": "Engine",
-    "body": "বডি পার্টস",
-    "cancel": "❌ বাতিল করুন",
-    "media_uploaded": "✅ মিডিয়া আপলোড হয়েছে",
-    "approve": "✅ প্রকাশ করুন",
-    "edit": "✏️ সম্পাদনা করুন",
-    "reject": "🚫 প্রত্যাখ্যান করুন",
-})

@@ -139,9 +139,8 @@ def test_main_menus_and_localization() -> None:
     assert t("ru", "engine_with_transmission") == "Двигатель с КПП"
     queue_status = t("ru", "queue_status", total=0, queued=0, published=0, waiting_duplicate=0)
     assert "Всего постов в очереди: 0" in queue_status
-    for language_code in ("en", "fa", "ur", "hi", "bn"):
-        assert t(language_code, "engine") == "Engine"
-        assert t(language_code, "engine_with_transmission") == "Engine with Gearbox"
+    assert t("en", "engine") == "Engine"
+    assert t("en", "engine_with_transmission") == "Engine with Gearbox"
 
 
 def test_prices_text_and_slots() -> None:
@@ -159,9 +158,10 @@ def test_prices_text_and_slots() -> None:
     assert text.startswith("🇦🇪 🇨🇳 🇷🇺 🇰🇿")
     assert "$110 USD" in text and "$220 USD" in text
     assert "Цена только ДВС: $110 USD" in text
-    assert "Цена ДВС с АКПП: $220 USD" in text
+    assert "Цена ДВС с КПП: $220 USD" in text
     assert "Engine / ДВС" not in text
     assert "Gearbox / АКПП" not in text
+    assert "АКПП" not in text
     assert "@Kpp_Motors_Roman" in text
 
     english_text = format_post_text(
@@ -170,8 +170,8 @@ def test_prices_text_and_slots() -> None:
         {"engine": {"usd": 110}, "engine_with_transmission": {"usd": 220}},
         language_code="en",
     )
-    assert "Engine only price: $110 USD" in english_text
-    assert "Engine with Gearbox price: $220 USD" in english_text
+    assert "Цена только ДВС: $110 USD" in english_text
+    assert "Цена ДВС с КПП: $220 USD" in english_text
 
     assert parse_aed_price("15000") == Decimal("15000")
     assert parse_aed_price("199") == Decimal("199")

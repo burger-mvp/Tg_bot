@@ -12,12 +12,11 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import BufferedInputFile, Message
 
 from database import (
+    find_user_for_role_assignment,
     get_all_users,
     get_queued_posts,
     get_queue_statistics,
-    get_user_by_shop_name,
     get_user_language,
-    get_user_role,
     set_user_admin,
     set_user_trusted_seller,
 )
@@ -38,13 +37,13 @@ SUPER_ADMIN_ACTION_TEXTS = (
 
 
 class TrustedSellerAssignment(StatesGroup):
-    """Ожидание имени магазина для назначения доверенного продавца."""
+    """Ожидание идентификатора пользователя для назначения доверенного продавца."""
     
     waiting_for_shop_name = State()
 
 
 class AdminAssignment(StatesGroup):
-    """Ожидание Telegram ID для назначения администратора."""
+    """Ожидание идентификатора пользователя для назначения администратора."""
     
     waiting_for_telegram_id = State()
 
@@ -79,7 +78,7 @@ async def start_trusted_seller_assignment(message: Message, state: FSMContext) -
     ~F.text.in_(SUPER_ADMIN_ACTION_TEXTS),
 )
 async def process_shop_name_for_trusted(message: Message, state: FSMContext) -> None:
-    """Обрабатывает введённое имя магазина и назначает роль доверенного продавца."""
+    """Назначает доверенного продавца по ID, username, имени или shop_name."""
     if message.from_user is None or message.text is None:
         return
     
@@ -90,19 +89,19 @@ async def process_shop_name_for_trusted(message: Message, state: FSMContext) -> 
     
     data = await state.get_data()
     language_code = data.get("language_code", "ru")
-    shop_name = message.text.strip()
-    
-    telegram_id = await get_user_by_shop_name(shop_name)
-    if telegram_id is None:
+    user = await find_user_for_role_assignment(message.text)
+    if user is None:
         await message.answer(t(language_code, "shop_not_found"))
         return
+    telegram_id = int(user["telegram_id"])
+    user_label = user.get("name") or user.get("username") or user.get("shop_name") or str(telegram_id)
     
     success = await set_user_trusted_seller(telegram_id)
     await state.clear()
     
     if success:
         await message.answer(
-            t(language_code, "trusted_seller_assigned"),
+            t(language_code, "trusted_seller_assigned", user_label=user_label),
             reply_markup=main_menu("super_admin", language_code),
         )
     else:
@@ -150,7 +149,7 @@ async def start_admin_assignment(message: Message, state: FSMContext) -> None:
     ~F.text.in_(SUPER_ADMIN_ACTION_TEXTS),
 )
 async def process_telegram_id_for_admin(message: Message, state: FSMContext) -> None:
-    """Обрабатывает введённый Telegram ID и назначает роль администратора."""
+    """Назначает администратора по ID, username, имени или shop_name."""
     if message.from_user is None or message.text is None:
         return
     
@@ -162,18 +161,12 @@ async def process_telegram_id_for_admin(message: Message, state: FSMContext) -> 
     data = await state.get_data()
     language_code = data.get("language_code", "ru")
     
-    # Проверяем что введено число
-    try:
-        telegram_id = int(message.text.strip())
-    except ValueError:
-        await message.answer(t(language_code, "invalid_price"))  # используем похожий текст об ошибке формата
-        return
-    
-    # Проверяем существование пользователя в БД
-    user_role = await get_user_role(telegram_id)
-    if user_role is None:
+    user = await find_user_for_role_assignment(message.text)
+    if user is None:
         await message.answer(t(language_code, "user_not_found"))
         return
+    telegram_id = int(user["telegram_id"])
+    user_label = user.get("name") or user.get("username") or user.get("shop_name") or str(telegram_id)
     
     # Назначаем роль admin
     success = await set_user_admin(telegram_id)
@@ -181,7 +174,7 @@ async def process_telegram_id_for_admin(message: Message, state: FSMContext) -> 
     
     if success:
         await message.answer(
-            t(language_code, "admin_assigned").format(telegram_id=telegram_id),
+            t(language_code, "admin_assigned", user_label=user_label),
             reply_markup=main_menu("super_admin", language_code),
         )
     else:
@@ -282,7 +275,7 @@ async def export_users_table(message: Message, state: FSMContext) -> None:
     output = io.StringIO()
     writer = csv.DictWriter(
         output,
-        fieldnames=["telegram_id", "username", "phone_number", "role", "shop_name", "language_code", "created_at"],
+        fieldnames=["telegram_id", "username", "name", "phone_number", "role", "shop_name", "language_code", "created_at"],
         extrasaction="ignore",
     )
     writer.writeheader()
