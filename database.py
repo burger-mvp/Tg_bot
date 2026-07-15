@@ -751,7 +751,11 @@ async def get_queue_statistics() -> dict[str, int]:
             COUNT(*) as total,
             COUNT(*) FILTER (WHERE status = 'queued') as queued,
             COUNT(*) FILTER (WHERE status = 'published') as published,
-            COUNT(*) FILTER (WHERE status = 'published' AND duplicate_due_at IS NOT NULL) as waiting_duplicate
+            COUNT(*) FILTER (
+                WHERE status IN ('published', 'duplicate_publishing')
+                  AND duplicate_due_at IS NOT NULL
+                  AND duplicate_due_at > NOW()
+            ) as waiting_duplicate
         FROM post_queue
         """
     )

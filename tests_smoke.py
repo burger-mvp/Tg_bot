@@ -3,6 +3,7 @@
 import asyncio
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from keyboards import main_menu, media_step_keyboard, start_keyboard
@@ -226,8 +227,16 @@ def test_prices_text_and_slots() -> None:
     assert isinstance(publication_channel_id(), int)
 
 
+def test_queue_statistics_counts_future_duplicates() -> None:
+    """Статистика очереди должна считать будущие незавершенные дубли."""
+    database_source = Path("database.py").read_text(encoding="utf-8")
+    assert "duplicate_due_at > NOW()" in database_source
+    assert "status IN ('published', 'duplicate_publishing')" in database_source
+
+
 if __name__ == "__main__":
     test_main_menus_and_localization()
     test_prices_text_and_slots()
+    test_queue_statistics_counts_future_duplicates()
     asyncio.run(test_video_chunks())
     print("Smoke checks passed.")
