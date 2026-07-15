@@ -18,6 +18,8 @@ from database import (
     approve_post,
     approve_post_for_immediate_publication,
     create_post,
+    assign_shop_name_on_registration,
+    display_name,
     get_last_queued_scheduled_at,
     get_post,
     get_user_language,
@@ -27,6 +29,7 @@ from database import (
     reject_post,
     set_moderation_message,
     update_pending_post_text,
+    upsert_user,
 )
 from keyboards import (
     cancel_keyboard,
@@ -164,7 +167,16 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
         return
 
     role = await get_role_from_db_or_config(message.from_user.id)
-    shop_name = await get_user_shop_name(message.from_user.id) or ""
+    await upsert_user(
+        message.from_user.id,
+        role,
+        language_code,
+        message.from_user.username,
+        display_name(message.from_user.username, message.from_user.first_name, message.from_user.last_name),
+    )
+    shop_name = await get_user_shop_name(message.from_user.id)
+    if not shop_name:
+        shop_name = await assign_shop_name_on_registration(message.from_user.id)
     post_text = format_post_text(description, post_kind, price_data, seller_name=shop_name, language_code=language_code)
     post_id = uuid4()
     # В тестовом режиме модерацию обходим, чтобы можно было быстро проверять публикации.
@@ -181,7 +193,7 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
             price_data=price_data,
             post_text=post_text,
             status=status,
-            scheduled_at=next_publication_slot(),
+            scheduled_at=next_free_publication_slot(await get_last_queued_scheduled_at()),
         )
     except Exception:
         logger.exception("Не удалось сохранить пост пользователя %s в post_queue", message.from_user.id)
