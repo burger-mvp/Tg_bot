@@ -7,6 +7,7 @@ from typing import Any, Final
 from uuid import UUID, uuid4
 
 from aiogram import Bot, F, Router
+from aiogram.enums import ChatType
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -47,6 +48,8 @@ from utils.publishing import send_queued_post
 
 
 router = Router(name=__name__)
+router.message.filter(F.chat.type == ChatType.PRIVATE)
+router.callback_query.filter(F.message.chat.type == ChatType.PRIVATE)
 logger = logging.getLogger(__name__)
 MAX_MEDIA_FILES: Final = 30
 MAX_MEDIA_FILE_SIZE_BYTES: Final = 20 * 1024 * 1024
