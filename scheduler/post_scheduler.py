@@ -32,6 +32,7 @@ WORKDAY_START = time(hour=9)
 WORKDAY_END = time(hour=22, minute=30)
 SLOT_INTERVAL = timedelta(minutes=30)
 DUPLICATE_RETRY_DELAY = timedelta(minutes=5)
+PENDING_DUPLICATES_SYNC_INTERVAL = timedelta(minutes=1)
 TEST_QUEUE_INTERVAL = timedelta(minutes=1)
 PRODUCTION_DUPLICATE_DELAY = timedelta(days=7)
 TEST_DUPLICATE_DELAY = timedelta(minutes=3)
@@ -133,14 +134,26 @@ class PostScheduler:
                 coalesce=True,
                 max_instances=1,
             )
+        await self.sync_pending_duplicates()
+        self._scheduler.add_job(
+            self.sync_pending_duplicates,
+            IntervalTrigger(minutes=1, timezone=SCHEDULER_TIMEZONE),
+            id="sync_pending_duplicates",
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+        )
+        self._scheduler.start()
+        if TEST_MODE:
+            await self.publish_next_post()
+
+    async def sync_pending_duplicates(self) -> None:
+        """Планирует все опубликованные посты, ожидающие единственного дубля."""
         now = datetime.now(SCHEDULER_TIMEZONE)
         for post_id, duplicate_due_at in await get_posts_waiting_for_duplicate():
             # После долгого простоя APScheduler не запускает просроченный DateTrigger.
             # В этом случае запускаем повтор сразу после старта, не теряя публикацию.
             self.schedule_duplicate(post_id, max(duplicate_due_at, now))
-        self._scheduler.start()
-        if TEST_MODE:
-            await self.publish_next_post()
 
     def shutdown(self) -> None:
         """Останавливает планировщик без ожидания уже несуществующих задач."""

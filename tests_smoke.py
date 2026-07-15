@@ -232,9 +232,10 @@ def test_prices_text_and_slots() -> None:
 def test_queue_statistics_counts_first_publication_and_duplicates_separately() -> None:
     """Статистика очереди должна разделять первую публикацию и дубли."""
     database_source = Path("database.py").read_text(encoding="utf-8")
-    assert "COUNT(*) FILTER (WHERE status = 'queued') as total" in database_source
+    assert "COUNT(*) FILTER (WHERE status = 'queued' AND published_at IS NULL) as total" in database_source
     assert "status IN ('published', 'duplicate_publishing')" in database_source
-    assert "duplicate_due_at > NOW()" not in database_source
+    assert "published_at IS NOT NULL" in database_source
+    assert "duplicate_due_at > NOW()" in database_source
 
 
 if __name__ == "__main__":

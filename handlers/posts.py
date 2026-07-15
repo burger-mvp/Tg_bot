@@ -25,7 +25,7 @@ from database import (
     get_user_language,
     get_user_phone_number,
     get_user_shop_name,
-    mark_post_published_without_duplicate,
+    mark_post_published,
     reject_post,
     set_moderation_message,
     update_pending_post_text,
@@ -41,7 +41,7 @@ from keyboards import (
 )
 from locales import SUPPORTED_LANGUAGE_CODES, normalize_language_code, t
 from roles import get_role_from_db_or_config, is_super_admin
-from scheduler.post_scheduler import next_free_publication_slot, publication_channel_id
+from scheduler.post_scheduler import duplicate_delay, next_free_publication_slot, publication_channel_id
 from utils.pricing import BODY_MARKUP, ENGINE_MARKUP, format_post_text, parse_aed_price, serialize_price
 from utils.publishing import send_queued_post
 
@@ -600,7 +600,7 @@ async def approve_moderated_post(callback: CallbackQuery, bot: Bot) -> None:
 
         if post.author_telegram_id not in KM_LOGISTICS_IDS:
             await send_queued_post(bot, publication_channel_id(), post)
-            await mark_post_published_without_duplicate(post.id)
+            await mark_post_published(post.id, duplicate_delay())
 
         admin_language_code = "ru"
         await callback.answer(t(admin_language_code, "moderation_approved"))

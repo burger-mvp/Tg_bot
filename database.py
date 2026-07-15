@@ -468,23 +468,6 @@ async def mark_post_published(post_id: UUID, duplicate_after: timedelta) -> date
     )
 
 
-async def mark_post_published_without_duplicate(post_id: UUID) -> None:
-    """Фиксирует мгновенную публикацию без постановки на повтор."""
-    await _get_pool().execute(
-        """
-        UPDATE post_queue
-        SET status = 'published',
-            published_at = NOW(),
-            duplicate_due_at = NULL,
-            updated_at = NOW(),
-            last_error = NULL
-        WHERE id = $1
-          AND status = 'publishing'
-        """,
-        post_id,
-    )
-
-
 async def mark_publication_failed(
     post_id: UUID,
     error_message: str,
@@ -516,6 +499,7 @@ async def get_posts_waiting_for_duplicate() -> list[tuple[UUID, datetime]]:
         FROM post_queue
         WHERE status = 'published'
           AND duplicate_due_at IS NOT NULL
+          AND published_at IS NOT NULL
         """
     )
     return [(row["id"], row["duplicate_due_at"]) for row in rows]
@@ -748,12 +732,14 @@ async def get_queue_statistics() -> dict[str, int]:
     record = await _get_pool().fetchrow(
         """
         SELECT 
-            COUNT(*) FILTER (WHERE status = 'queued') as total,
-            COUNT(*) FILTER (WHERE status = 'queued') as queued,
+            COUNT(*) FILTER (WHERE status = 'queued' AND published_at IS NULL) as total,
+            COUNT(*) FILTER (WHERE status = 'queued' AND published_at IS NULL) as queued,
             COUNT(*) FILTER (WHERE status = 'published') as published,
             COUNT(*) FILTER (
                 WHERE status IN ('published', 'duplicate_publishing')
+                  AND published_at IS NOT NULL
                   AND duplicate_due_at IS NOT NULL
+                  AND duplicate_due_at > NOW()
             ) as waiting_duplicate
         FROM post_queue
         """
