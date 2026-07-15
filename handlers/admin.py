@@ -15,6 +15,7 @@ from config import SCHEDULER_TIMEZONE
 from database import (
     find_user_for_role_assignment,
     get_all_users,
+    get_posts_waiting_for_duplicate_details,
     get_queued_posts,
     get_queue_statistics,
     get_user_language,
@@ -212,12 +213,13 @@ async def view_queue_status(message: Message, state: FSMContext) -> None:
 
         stats = await get_queue_statistics()
         queued_posts = await get_queued_posts()
+        duplicate_posts = await get_posts_waiting_for_duplicate_details()
         total_posts = stats.get("total", 0)
         queued = stats.get("queued", 0)
         published = stats.get("published", 0)
         waiting_duplicate = stats.get("waiting_duplicate", 0)
 
-        if total_posts == 0 or (not queued_posts and queued == 0):
+        if queued == 0 and waiting_duplicate == 0 and not queued_posts and not duplicate_posts:
             await message.answer(t(language_code, "publication_queue_empty"))
             return
 
@@ -243,6 +245,22 @@ async def view_queue_status(message: Message, state: FSMContext) -> None:
                     )
                 )
             message_text = f"{message_text}\n\n" + "\n".join(queue_lines)
+
+        if duplicate_posts:
+            duplicate_lines = [t(language_code, "duplicate_list_header")]
+            for index, post in enumerate(duplicate_posts, start=1):
+                duplicate_due_at = post.duplicate_due_at or post.scheduled_at
+                duplicate_lines.append(
+                    t(
+                        language_code,
+                        "duplicate_list_item",
+                        index=index,
+                        shop_name=post.author_shop_name or "—",
+                        duplicate_due_at=duplicate_due_at.astimezone(SCHEDULER_TIMEZONE).strftime("%d.%m %H:%M"),
+                        description=post.description[:80],
+                    )
+                )
+            message_text = f"{message_text}\n\n" + "\n".join(duplicate_lines)
 
         await message.answer(message_text)
     except Exception as error:

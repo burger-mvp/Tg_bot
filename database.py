@@ -771,6 +771,25 @@ async def get_queued_posts(limit: int = 20) -> list[QueuedPost]:
     return [_record_to_post(record) for record in records]
 
 
+async def get_posts_waiting_for_duplicate_details(limit: int = 20) -> list[QueuedPost]:
+    """Возвращает ближайшие опубликованные посты, ожидающие дубля."""
+    records = await _get_pool().fetch(
+        """
+        SELECT pq.*, u.shop_name AS author_shop_name
+        FROM post_queue pq
+        JOIN users u ON u.telegram_id = pq.author_telegram_id
+        WHERE pq.status = 'published'
+          AND pq.published_at IS NOT NULL
+          AND pq.duplicate_due_at IS NOT NULL
+          AND pq.duplicate_due_at > NOW()
+        ORDER BY pq.duplicate_due_at, pq.created_at
+        LIMIT $1
+        """,
+        limit,
+    )
+    return [_record_to_post(record) for record in records]
+
+
 async def get_all_users() -> list[dict[str, Any]]:
     """Возвращает всех зарегистрированных пользователей для экспорта."""
     records = await _get_pool().fetch(
