@@ -68,8 +68,8 @@ class PostCreation(StatesGroup):
     waiting_for_media = State()
     waiting_for_category = State()
     waiting_for_engine_type = State()
-    waiting_for_engine_price = State()
     waiting_for_transmission_price = State()
+    waiting_for_engine_price = State()
     waiting_for_description = State()
     waiting_for_body_description = State()
     waiting_for_body_price = State()
@@ -411,13 +411,13 @@ async def select_engine_with_transmission(callback: CallbackQuery, state: FSMCon
     language_code = normalize_language_code((await state.get_data()).get("language_code"))
     await callback.answer()
     await state.update_data(post_kind="engine_with_transmission")
-    await state.set_state(PostCreation.waiting_for_engine_price)
-    await _answer_with_cancel(callback.message, language_code, "enter_engine_price")
+    await state.set_state(PostCreation.waiting_for_transmission_price)
+    await _answer_with_cancel(callback.message, language_code, "enter_transmission_price")
 
 
 @router.message(PostCreation.waiting_for_engine_price, F.text)
 async def receive_engine_price(message: Message, state: FSMContext) -> None:
-    """Сохраняет цену двигателя и выбирает следующий требуемый шаг."""
+    """Сохраняет цену двигателя и запрашивает описание."""
     language_code = await _language_from_state_or_database(message, state)
     try:
         price = parse_aed_price(message.text or "")
@@ -429,17 +429,13 @@ async def receive_engine_price(message: Message, state: FSMContext) -> None:
     prices = _price_data(data)
     prices["engine"] = serialize_price(price, ENGINE_MARKUP)
     await state.update_data(price_data=prices)
-    if data.get("post_kind") == "engine_with_transmission":
-        await state.set_state(PostCreation.waiting_for_transmission_price)
-        await _answer_with_cancel(message, language_code, "enter_transmission_price")
-        return
     await state.set_state(PostCreation.waiting_for_description)
     await _answer_with_cancel(message, language_code, "enter_description")
 
 
 @router.message(PostCreation.waiting_for_transmission_price, F.text)
 async def receive_transmission_price(message: Message, state: FSMContext) -> None:
-    """Сохраняет вторую цену ДВС с КПП, затем запрашивает описание."""
+    """Сохраняет цену ДВС с КПП, затем запрашивает цену отдельного ДВС."""
     language_code = await _language_from_state_or_database(message, state)
     try:
         price = parse_aed_price(message.text or "")
@@ -450,8 +446,8 @@ async def receive_transmission_price(message: Message, state: FSMContext) -> Non
     prices = _price_data(await state.get_data())
     prices["engine_with_transmission"] = serialize_price(price, ENGINE_MARKUP)
     await state.update_data(price_data=prices)
-    await state.set_state(PostCreation.waiting_for_description)
-    await _answer_with_cancel(message, language_code, "enter_description")
+    await state.set_state(PostCreation.waiting_for_engine_price)
+    await _answer_with_cancel(message, language_code, "enter_engine_price")
 
 
 @router.message(PostCreation.waiting_for_description, F.text)

@@ -141,10 +141,14 @@ def test_main_menus_and_localization() -> None:
     assert moderation_buttons == ["✅ Выложить", "✏️ Редактировать", "🚫 Отклонить"]
     assert t("ru", "engine") == "Двигатель / ДВС"
     assert t("ru", "engine_with_transmission") == "Двигатель с КПП"
+    assert t("ru", "enter_transmission_price") == "Введите цену двигателя с КПП в AED:"
+    assert t("ru", "enter_engine_price") == "Введите цену двигателя в AED:"
     queue_status = t("ru", "queue_status", total=0, queued=0, published=0, waiting_duplicate=0)
     assert "Всего постов в очереди: 0" in queue_status
     assert t("en", "engine") == "Engine"
     assert t("en", "engine_with_transmission") == "Engine with Gearbox"
+    assert t("en", "enter_transmission_price") == "Enter the engine with gearbox price in AED:"
+    assert t("en", "enter_engine_price") == "Enter the engine price in AED:"
 
 
 def test_prices_text_and_slots() -> None:

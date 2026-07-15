@@ -144,7 +144,7 @@ EN_TEXTS = {
     "choose_engine_type": "Choose the configuration:",
     "engine_only": "Engine only",
     "engine_with_transmission": "Engine with Gearbox",
-    "enter_engine_price": "Enter the engine-only price in AED:",
+    "enter_engine_price": "Enter the engine price in AED:",
     "enter_transmission_price": "Enter the engine with gearbox price in AED:",
     "enter_body_description": "Enter the description:",
     "enter_body_price": "Enter the price in AED:",
