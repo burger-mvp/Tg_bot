@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
     name TEXT,
     registered_at TIMESTAMPTZ,
     shop_name TEXT,
+    is_banned BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

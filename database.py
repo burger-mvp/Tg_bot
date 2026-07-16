@@ -66,6 +66,9 @@ async def _ensure_schema_updates(pool: asyncpg.Pool) -> None:
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ"
         )
         await connection.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN NOT NULL DEFAULT FALSE"
+        )
+        await connection.execute(
             "UPDATE users SET created_at = COALESCE(created_at, registered_at, NOW()) WHERE created_at IS NULL"
         )
         await connection.execute(
@@ -211,6 +214,14 @@ async def get_user_phone_number(telegram_id: int) -> str | None:
         "SELECT phone_number FROM users WHERE telegram_id = $1",
         telegram_id,
     )
+
+
+async def is_user_banned(telegram_id: int) -> bool:
+    """Проверяет, заблокирован ли пользователь администратором."""
+    return bool(await _get_pool().fetchval(
+        "SELECT COALESCE(is_banned, FALSE) FROM users WHERE telegram_id = $1",
+        telegram_id,
+    ))
 
 
 async def update_user_role(telegram_id: int, role: str) -> None:
@@ -644,6 +655,16 @@ async def set_user_trusted_seller(telegram_id: int) -> bool:
     return result != "UPDATE 0"
 
 
+async def set_user_banned(telegram_id: int, is_banned: bool) -> bool:
+    """Устанавливает флаг блокировки пользователя. Возвращает True если пользователь найден."""
+    result = await _get_pool().execute(
+        "UPDATE users SET is_banned = $2 WHERE telegram_id = $1",
+        telegram_id,
+        is_banned,
+    )
+    return result != "UPDATE 0"
+
+
 async def get_user_by_shop_name(shop_name: str) -> int | None:
     """Возвращает telegram_id пользователя по имени магазина."""
     return await _get_pool().fetchval(
@@ -665,7 +686,7 @@ async def find_user_for_role_assignment(query: str) -> dict[str, Any] | None:
     username_query = cleaned_query.lstrip("@").lower()
     record = await _get_pool().fetchrow(
         """
-        SELECT telegram_id, username, name, shop_name, role
+        SELECT telegram_id, username, name, shop_name, role, is_banned
         FROM users
         WHERE ($1::bigint IS NOT NULL AND telegram_id = $1)
            OR lower(regexp_replace(COALESCE(username, ''), '^@', '')) = $2

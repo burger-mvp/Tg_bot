@@ -101,11 +101,12 @@ def engine_type_keyboard(language_code: str) -> InlineKeyboardMarkup:
 
 
 def moderation_keyboard(post_id: str, language_code: str) -> InlineKeyboardMarkup:
-    """Создает кнопки одобрения, правки и отклонения поста для супер-администратора."""
+    """Создает кнопки модерации поста для супер-администратора."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=t(language_code, "approve"), callback_data=f"moderation:approve:{post_id}")],
             [InlineKeyboardButton(text=t(language_code, "edit"), callback_data=f"moderation:edit:{post_id}")],
             [InlineKeyboardButton(text=t(language_code, "reject"), callback_data=f"moderation:reject:{post_id}")],
+            [InlineKeyboardButton(text=t(language_code, "ban_author"), callback_data=f"moderation:ban:{post_id}")],
         ]
     )

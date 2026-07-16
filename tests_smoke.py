@@ -155,7 +155,7 @@ def test_main_menus_and_localization() -> None:
     assert media_step_keyboard("ru").keyboard[0][0].text == "✅ Медиа загружены"
     assert start_keyboard("ru").keyboard[0][0].text == "🚀 Начать"
     moderation_buttons = [row[0].text for row in moderation_keyboard("post-id", "ru").inline_keyboard]
-    assert moderation_buttons == ["✅ Выложить", "✏️ Редактировать", "🚫 Отклонить"]
+    assert moderation_buttons == ["✅ Выложить", "✏️ Редактировать", "🚫 Отклонить", "❌ Заблокировать автора"]
     assert t("ru", "engine") == "Двигатель / ДВС"
     assert t("ru", "engine_with_transmission") == "Двигатель с КПП"
     assert t("ru", "enter_transmission_price") == "Введите цену двигателя с КПП в AED:"
@@ -170,6 +170,8 @@ def test_main_menus_and_localization() -> None:
     assert "The bot helps" in t("en", "info_message")
     assert "<tg-emoji" in t("ru", "info_message")
     assert "<tg-emoji" in t("en", "info_message")
+    assert t("ru", "banned_user_message") == "Ваш аккаунт заблокирован администратором."
+    assert t("en", "banned_user_message") == "Your account has been blocked by an administrator."
 
 
 def test_prices_text_and_slots() -> None:

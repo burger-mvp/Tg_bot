@@ -26,8 +26,10 @@ from database import (
     get_user_language,
     get_user_phone_number,
     get_user_shop_name,
+    is_user_banned,
     mark_post_published,
     reject_post,
+    set_user_banned,
     set_moderation_message,
     update_pending_post_text,
     upsert_user,
@@ -110,6 +112,24 @@ async def _answer_with_cancel(message: Message, language_code: str, text_key: st
     )
 
 
+async def _reject_banned_user(message: Message, state: FSMContext | None = None) -> bool:
+    """Останавливает создание поста для заблокированного пользователя."""
+    if message.from_user is None:
+        return True
+    return await _reject_banned_telegram_id(message.from_user.id, message, state)
+
+
+async def _reject_banned_telegram_id(telegram_id: int, message: Message, state: FSMContext | None = None) -> bool:
+    """Останавливает создание поста для заблокированного telegram_id."""
+    if not await is_user_banned(telegram_id):
+        return False
+    if state is not None:
+        await state.clear()
+    language_code = await _registered_language(telegram_id) or "ru"
+    await message.answer(t(language_code, "banned_user_message"))
+    return True
+
+
 def _price_data(data: dict[str, Any]) -> dict[str, Any]:
     """Извлекает рассчитанные цены из FSM, защищаясь от поврежденного состояния."""
     prices = data.get("price_data")
@@ -124,6 +144,8 @@ async def _save_media_item(
     file_size: int | None,
 ) -> None:
     """Добавляет обычное видео или видео-файл к текущему создаваемому посту."""
+    if await _reject_banned_user(message, state):
+        return
     language_code = await _language_from_state_or_database(message, state)
     max_file_size = MAX_LOCAL_API_MEDIA_FILE_SIZE_BYTES if TELEGRAM_API_SERVER_URL else MAX_MEDIA_FILE_SIZE_BYTES
     max_file_size_mb = 2_000 if TELEGRAM_API_SERVER_URL else 20
@@ -152,6 +174,8 @@ async def _save_media_item(
 async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, description: str) -> None:
     """Собирает текст, сохраняет пост и направляет его в нужный бизнес-процесс."""
     if message.from_user is None:
+        return
+    if await _reject_banned_user(message, state):
         return
 
     data = await state.get_data()
@@ -251,6 +275,8 @@ async def _save_completed_post(message: Message, state: FSMContext, bot: Bot, de
 
 async def _finish_description(message: Message, state: FSMContext, bot: Bot) -> None:
     """Проверяет описание и завершает создание поста."""
+    if await _reject_banned_user(message, state):
+        return
     if message.text is None:
         return
     language_code = await _language_from_state_or_database(message, state)
@@ -274,6 +300,8 @@ async def start_post_creation(message: Message, state: FSMContext) -> None:
     """Запускает общий сценарий создания поста из главного меню."""
     if message.from_user is None:
         return
+    if await _reject_banned_user(message, state):
+        return
     language_code = await _registered_language(message.from_user.id)
     if language_code is None or not await get_user_phone_number(message.from_user.id):
         await message.answer(t("ru", "language_required"))
@@ -289,6 +317,8 @@ async def start_post_creation(message: Message, state: FSMContext) -> None:
 async def finish_media_collection(message: Message, state: FSMContext) -> None:
     """Завершает ручной сбор медиа и показывает выбор категории."""
     if message.from_user is None:
+        return
+    if await _reject_banned_user(message, state):
         return
     language_code = normalize_language_code((await state.get_data()).get("language_code"))
     media_items = (await state.get_data()).get("media_items")
@@ -341,6 +371,8 @@ async def collect_video_document(message: Message, state: FSMContext) -> None:
 @router.message(PostCreation.waiting_for_media)
 async def reject_non_video(message: Message, state: FSMContext) -> None:
     """Не позволяет перейти дальше с текстом или неподдерживаемым вложением."""
+    if await _reject_banned_user(message, state):
+        return
     language_code = await _language_from_state_or_database(message, state)
     await message.answer(t(language_code, "media_expected"), reply_markup=media_step_keyboard(language_code))
 
@@ -352,6 +384,8 @@ async def reject_non_video(message: Message, state: FSMContext) -> None:
 async def explain_media_outside_post_creation(message: Message, state: FSMContext) -> None:
     """Не оставляет без ответа медиа, присланное без активного шага загрузки."""
     if message.from_user is None:
+        return
+    if await _reject_banned_user(message, state):
         return
 
     current_state = await state.get_state()
@@ -373,6 +407,9 @@ async def select_engine_category(callback: CallbackQuery, state: FSMContext) -> 
     """Переходит от категории ДВС к выбору комплектации."""
     if callback.message is None:
         return
+    if await _reject_banned_telegram_id(callback.from_user.id, callback.message, state):
+        await callback.answer()
+        return
     language_code = normalize_language_code((await state.get_data()).get("language_code"))
     await callback.answer()
     await state.set_state(PostCreation.waiting_for_engine_type)
@@ -387,6 +424,9 @@ async def select_body_category(callback: CallbackQuery, state: FSMContext) -> No
     """Для кузовного товара сначала запрашивает описание."""
     if callback.message is None:
         return
+    if await _reject_banned_telegram_id(callback.from_user.id, callback.message, state):
+        await callback.answer()
+        return
     language_code = normalize_language_code((await state.get_data()).get("language_code"))
     await callback.answer()
     await state.update_data(post_kind="body")
@@ -398,6 +438,9 @@ async def select_body_category(callback: CallbackQuery, state: FSMContext) -> No
 async def select_engine_only(callback: CallbackQuery, state: FSMContext) -> None:
     """Выбирает сценарий с одной ценой ДВС."""
     if callback.message is None:
+        return
+    if await _reject_banned_telegram_id(callback.from_user.id, callback.message, state):
+        await callback.answer()
         return
     language_code = normalize_language_code((await state.get_data()).get("language_code"))
     await callback.answer()
@@ -411,6 +454,9 @@ async def select_engine_with_transmission(callback: CallbackQuery, state: FSMCon
     """Выбирает сценарий с ценами отдельного ДВС и ДВС с КПП."""
     if callback.message is None:
         return
+    if await _reject_banned_telegram_id(callback.from_user.id, callback.message, state):
+        await callback.answer()
+        return
     language_code = normalize_language_code((await state.get_data()).get("language_code"))
     await callback.answer()
     await state.update_data(post_kind="engine_with_transmission")
@@ -421,6 +467,8 @@ async def select_engine_with_transmission(callback: CallbackQuery, state: FSMCon
 @router.message(PostCreation.waiting_for_engine_price, F.text)
 async def receive_engine_price(message: Message, state: FSMContext) -> None:
     """Сохраняет цену двигателя и запрашивает описание."""
+    if await _reject_banned_user(message, state):
+        return
     language_code = await _language_from_state_or_database(message, state)
     try:
         price = parse_aed_price(message.text or "")
@@ -439,6 +487,8 @@ async def receive_engine_price(message: Message, state: FSMContext) -> None:
 @router.message(PostCreation.waiting_for_transmission_price, F.text)
 async def receive_transmission_price(message: Message, state: FSMContext) -> None:
     """Сохраняет цену ДВС с КПП, затем запрашивает цену отдельного ДВС."""
+    if await _reject_banned_user(message, state):
+        return
     language_code = await _language_from_state_or_database(message, state)
     try:
         price = parse_aed_price(message.text or "")
@@ -462,6 +512,8 @@ async def receive_engine_description(message: Message, state: FSMContext, bot: B
 @router.message(PostCreation.waiting_for_body_description, F.text)
 async def receive_body_description(message: Message, state: FSMContext) -> None:
     """Для кузовного товара сохраняет описание до ввода цены."""
+    if await _reject_banned_user(message, state):
+        return
     language_code = await _language_from_state_or_database(message, state)
     description = (message.text or "").strip()
     if not description:
@@ -483,6 +535,8 @@ async def receive_body_description(message: Message, state: FSMContext) -> None:
 @router.message(PostCreation.waiting_for_body_price, F.text)
 async def receive_body_price(message: Message, state: FSMContext, bot: Bot) -> None:
     """Рассчитывает цену кузовной детали с наценкой 15% и сохраняет пост."""
+    if await _reject_banned_user(message, state):
+        return
     language_code = await _language_from_state_or_database(message, state)
     try:
         price = parse_aed_price(message.text or "")
@@ -509,6 +563,8 @@ async def receive_body_price(message: Message, state: FSMContext, bot: Bot) -> N
 )
 async def reject_non_text_price(message: Message, state: FSMContext) -> None:
     """На шагах цены не принимает стикеры и другие нетекстовые сообщения."""
+    if await _reject_banned_user(message, state):
+        return
     language_code = await _language_from_state_or_database(message, state)
     await _answer_with_cancel(message, language_code, "invalid_price")
 
@@ -522,6 +578,8 @@ async def reject_non_text_price(message: Message, state: FSMContext) -> None:
 )
 async def reject_non_text_post_value(message: Message, state: FSMContext) -> None:
     """Не принимает вложения на шагах цены и описания."""
+    if await _reject_banned_user(message, state):
+        return
     language_code = await _language_from_state_or_database(message, state)
     await _answer_with_cancel(message, language_code, "send_text_only")
 
@@ -656,6 +714,49 @@ async def reject_moderated_post(callback: CallbackQuery, bot: Bot) -> None:
         )
     except TelegramAPIError:
         logger.warning("Не удалось уведомить автора %s об отклонении поста", author_telegram_id)
+
+
+@router.callback_query(F.data.startswith("moderation:ban:"))
+async def ban_moderated_post_author(callback: CallbackQuery, bot: Bot) -> None:
+    """Блокирует автора ожидающего модерации поста и отклоняет этот пост."""
+    if not await _require_super_admin(callback):
+        return
+    post_id = _post_id_from_callback(callback, "ban")
+    if post_id is None:
+        await callback.answer(t("ru", "already_moderated"), show_alert=True)
+        return
+
+    pending_post = await get_post(post_id)
+    if pending_post is None or pending_post.status != "pending_moderation":
+        await callback.answer(t("ru", "already_moderated"), show_alert=True)
+        return
+
+    if not await set_user_banned(pending_post.author_telegram_id, True):
+        await callback.answer(t("ru", "ban_user_not_found", user_id=pending_post.author_telegram_id), show_alert=True)
+        return
+
+    result = await reject_post(post_id)
+    if result is None:
+        await callback.answer(t("ru", "already_moderated"), show_alert=True)
+        return
+
+    author_telegram_id, _shop_name = result
+    await callback.answer(t("ru", "author_banned"))
+    if callback.message is not None:
+        try:
+            await callback.message.edit_reply_markup(reply_markup=None)
+        except TelegramBadRequest:
+            pass
+        await callback.message.answer(t("ru", "author_banned"))
+
+    author_language = await get_user_language(author_telegram_id) or "ru"
+    try:
+        await bot.send_message(
+            author_telegram_id,
+            t(author_language, "author_banned_notification"),
+        )
+    except TelegramAPIError:
+        logger.warning("Не удалось уведомить автора %s о блокировке", author_telegram_id)
 
 
 @router.callback_query(F.data.startswith("moderation:edit:"))

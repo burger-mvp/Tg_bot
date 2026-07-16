@@ -6,6 +6,7 @@ import logging
 from datetime import datetime
 
 from aiogram import F, Router
+from aiogram.filters import Command
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -19,12 +20,13 @@ from database import (
     get_queued_posts,
     get_queue_statistics,
     get_user_language,
+    set_user_banned,
     set_user_admin,
     set_user_trusted_seller,
 )
 from keyboards import cancel_keyboard, main_menu
 from locales import SUPPORTED_LANGUAGE_CODES, t
-from roles import is_super_admin
+from roles import is_admin_or_higher, is_super_admin
 
 
 router = Router(name=__name__)
@@ -48,6 +50,67 @@ class AdminAssignment(StatesGroup):
     """Ожидание идентификатора пользователя для назначения администратора."""
     
     waiting_for_telegram_id = State()
+
+
+def _telegram_id_from_command(message: Message) -> int | None:
+    """Извлекает Telegram ID из команды вида /ban 123."""
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) != 2:
+        return None
+    try:
+        return int(parts[1].strip())
+    except ValueError:
+        return None
+
+
+async def _admin_language(message: Message) -> str:
+    """Возвращает язык администратора с безопасным русским fallback."""
+    if message.from_user is None:
+        return "ru"
+    language_code = await get_user_language(message.from_user.id)
+    return language_code if language_code in SUPPORTED_LANGUAGE_CODES else "ru"
+
+
+@router.message(Command("ban"))
+async def ban_user_command(message: Message) -> None:
+    """Блокирует пользователя по Telegram ID из личной команды администратора."""
+    if message.from_user is None:
+        return
+    language_code = await _admin_language(message)
+    if not await is_admin_or_higher(message.from_user.id):
+        await message.answer(t(language_code, "access_denied"))
+        return
+
+    user_id = _telegram_id_from_command(message)
+    if user_id is None:
+        await message.answer(t(language_code, "ban_usage"))
+        return
+
+    if not await set_user_banned(user_id, True):
+        await message.answer(t(language_code, "ban_user_not_found", user_id=user_id))
+        return
+    await message.answer(t(language_code, "ban_success", user_id=user_id))
+
+
+@router.message(Command("unban"))
+async def unban_user_command(message: Message) -> None:
+    """Разблокирует пользователя по Telegram ID из личной команды администратора."""
+    if message.from_user is None:
+        return
+    language_code = await _admin_language(message)
+    if not await is_admin_or_higher(message.from_user.id):
+        await message.answer(t(language_code, "access_denied"))
+        return
+
+    user_id = _telegram_id_from_command(message)
+    if user_id is None:
+        await message.answer(t(language_code, "unban_usage"))
+        return
+
+    if not await set_user_banned(user_id, False):
+        await message.answer(t(language_code, "ban_user_not_found", user_id=user_id))
+        return
+    await message.answer(t(language_code, "unban_success", user_id=user_id))
 
 
 @router.message(StateFilter("*"), F.text.in_(SET_TRUSTED_SELLER_TEXTS))
