@@ -87,9 +87,9 @@ RU_TEXTS = {
     "users_export_header": "📊 **Экспорт таблицы users**\n\nФайл содержит всех зарегистрированных пользователей.",
     "info_message": """Бот помогает продать Ваши запчасти публикуя их в канале с аудиторией 30 000 человек. Вам нужно только сделать пост с фото или видео Вашего товара, указать цену и добавить описание.
 
-Как пользоваться <tg-emoji emoji-id="543611387718941026">❓</tg-emoji>
+Как пользоваться <tg-emoji emoji-id="5436113877181941026">❓</tg-emoji>
 
-1. <tg-emoji emoji-id="5282843764451195332">🖥️</tg-emoji>Нажмите «Создать пост»
+1. <tg-emoji emoji-id="5282843764451195532">🖥️</tg-emoji>Нажмите «Создать пост»
 2. <tg-emoji emoji-id="5253742260054409879">✉️</tg-emoji>Загрузите фото/видео товара
 3. Выберите категорию (Engine or Body parts )
 4. Укажите цену в AED
@@ -98,7 +98,7 @@ RU_TEXTS = {
 
 Удачных продаж <tg-emoji emoji-id="5406683434124859552">🛍️</tg-emoji>
 
-<tg-emoji emoji-id="543611387718941026">❓</tg-emoji>Вопросы? Обратитесь к @Kpp_Motors""",
+<tg-emoji emoji-id="5436113877181941026">❓</tg-emoji>Вопросы? Обратитесь к @Kpp_Motors""",
 }
 
 EN_TEXTS = {
@@ -187,9 +187,9 @@ EN_TEXTS = {
     "users_export_header": "📊 **Users table export**\n\nFile contains all registered users.",
     "info_message": """The bot helps sell your parts by publishing them in a channel with an audience of 30,000 people. You only need to create a post with photos or video of your item, specify the price and add a description.
 
-How to use <tg-emoji emoji-id="543611387718941026">❓</tg-emoji>
+How to use <tg-emoji emoji-id="5436113877181941026">❓</tg-emoji>
 
-1. <tg-emoji emoji-id="5282843764451195332">🖥️</tg-emoji>Tap “Create post”
+1. <tg-emoji emoji-id="5282843764451195532">🖥️</tg-emoji>Tap “Create post”
 2. <tg-emoji emoji-id="5253742260054409879">✉️</tg-emoji>Upload product photos/videos
 3. Choose a category (Engine or Body parts )
 4. Enter the price in AED
@@ -198,5 +198,5 @@ How to use <tg-emoji emoji-id="543611387718941026">❓</tg-emoji>
 
 Good sales <tg-emoji emoji-id="5406683434124859552">🛍️</tg-emoji>
 
-<tg-emoji emoji-id="543611387718941026">❓</tg-emoji>Questions? Contact @Kpp_Motors""",
+<tg-emoji emoji-id="5436113877181941026">❓</tg-emoji>Questions? Contact @Kpp_Motors""",
 }

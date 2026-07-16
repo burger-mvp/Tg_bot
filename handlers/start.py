@@ -23,7 +23,7 @@ from database import (
 from keyboards import LANGUAGE_KEYBOARD, main_menu, phone_keyboard, start_keyboard
 from locales import SUPPORTED_LANGUAGE_CODES, t
 from roles import get_role_from_db_or_config, notification_recipient_ids
-from utils.premium_emoji import strip_tg_emoji_tags, tg_emoji_html_to_entities
+from utils.premium_emoji import strip_tg_emoji_tags
 
 
 router = Router(name=__name__)
@@ -210,9 +210,8 @@ async def command_info(message: Message) -> None:
         language_code = "ru"
 
     info_text = t(language_code, "info_message")
-    plain_info_text, entities = tg_emoji_html_to_entities(info_text)
     try:
-        await message.answer(plain_info_text, entities=entities)
+        await message.answer(info_text, parse_mode="HTML")
     except TelegramAPIError:
-        logger.warning("Не удалось отправить /info с Telegram premium emoji", exc_info=True)
+        logger.warning("Не удалось отправить /info с HTML premium emoji", exc_info=True)
         await message.answer(strip_tg_emoji_tags(info_text))
