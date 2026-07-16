@@ -208,4 +208,4 @@ async def command_info(message: Message) -> None:
     if language_code not in SUPPORTED_LANGUAGE_CODES:
         language_code = "ru"
     
-    await message.answer(t(language_code, "info_message"))
+    await message.answer(t(language_code, "info_message"), parse_mode="HTML")

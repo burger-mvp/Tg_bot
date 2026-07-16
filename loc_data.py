@@ -85,27 +85,20 @@ RU_TEXTS = {
     "queue_empty": "Очередь пуста. Все посты опубликованы.",
     "publication_queue_empty": "Очередь публикаций пуста.",
     "users_export_header": "📊 **Экспорт таблицы users**\n\nФайл содержит всех зарегистрированных пользователей.",
-    "info_message": """🤖 **О боте KPP Motors**
+    "info_message": """Бот помогает продать Ваши запчасти публикуя их в канале с аудиторией 30 000 человек. Вам нужно только сделать пост с фото или видео Вашего товара, указать цену и добавить описание.
 
-Этот бот помогает продавцам автозапчастей публиковать товары в канале.
+Как пользоваться <tg-emoji emoji-id="543611387718941026">❓</tg-emoji>
 
-📋 **Основные функции:**
-• Загрузка фото и видео товаров
-• Автоматический расчёт цен с наценкой
-• Публикация в канал по расписанию
-• Мультиязычная поддержка
-
-🚀 **Как пользоваться:**
-1. Нажмите «Создать пост»
-2. Загрузите фото/видео товара
-3. Выберите категорию (Engine или кузовное)
+1. <tg-emoji emoji-id="5282843764451195332">🖥️</tg-emoji>Нажмите «Создать пост»
+2. <tg-emoji emoji-id="5253742260054409879">✉️</tg-emoji>Загрузите фото/видео товара
+3. Выберите категорию (Engine or Body parts )
 4. Укажите цену в AED
-5. Добавьте описание
+5. <tg-emoji emoji-id="5395444784611480792">✏️</tg-emoji>Добавьте описание
 6. Пост отправится на модерацию
 
-💡 **Совет:** Вы можете загрузить до 30 медиафайлов в один пост. Цены округляются автоматически для красоты.
+Удачных продаж <tg-emoji emoji-id="5406683434124859552">🛍️</tg-emoji>
 
-❓ Вопросы? Обратитесь к @Kpp_Motors""",
+<tg-emoji emoji-id="543611387718941026">❓</tg-emoji>Вопросы? Обратитесь к @Kpp_Motors""",
 }
 
 EN_TEXTS = {
@@ -192,25 +185,18 @@ EN_TEXTS = {
     "queue_empty": "Queue is empty. All posts have been published.",
     "publication_queue_empty": "Publication queue is empty.",
     "users_export_header": "📊 **Users table export**\n\nFile contains all registered users.",
-    "info_message": """🤖 **About KPP Motors Bot**
+    "info_message": """Бот помогает продать Ваши запчасти публикуя их в канале с аудиторией 30 000 человек. Вам нужно только сделать пост с фото или видео Вашего товара, указать цену и добавить описание.
 
-This bot helps auto parts sellers publish products to the channel.
+Как пользоваться <tg-emoji emoji-id="543611387718941026">❓</tg-emoji>
 
-📋 **Main features:**
-• Upload product photos and videos
-• Automatic price calculation with markup
-• Scheduled channel publishing
-• Multilingual support
+1. <tg-emoji emoji-id="5282843764451195332">🖥️</tg-emoji>Нажмите «Создать пост»
+2. <tg-emoji emoji-id="5253742260054409879">✉️</tg-emoji>Загрузите фото/видео товара
+3. Выберите категорию (Engine or Body parts )
+4. Укажите цену в AED
+5. <tg-emoji emoji-id="5395444784611480792">✏️</tg-emoji>Добавьте описание
+6. Пост отправится на модерацию
 
-🚀 **How to use:**
-1. Tap "Create post"
-2. Upload product photos/videos
-3. Choose category (Engine or body parts)
-4. Enter price in AED
-5. Add description
-6. Post will be sent for moderation
+Удачных продаж <tg-emoji emoji-id="5406683434124859552">🛍️</tg-emoji>
 
-💡 **Tip:** You can upload up to 30 media files in one post. Prices are automatically rounded for clarity.
-
-❓ Questions? Contact @Kpp_Motors""",
+<tg-emoji emoji-id="543611387718941026">❓</tg-emoji>Вопросы? Обратитесь к @Kpp_Motors""",
 }
