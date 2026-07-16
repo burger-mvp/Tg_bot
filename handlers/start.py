@@ -23,6 +23,7 @@ from database import (
 from keyboards import LANGUAGE_KEYBOARD, main_menu, phone_keyboard, start_keyboard
 from locales import SUPPORTED_LANGUAGE_CODES, t
 from roles import get_role_from_db_or_config, notification_recipient_ids
+from utils.premium_emoji import strip_tg_emoji_tags
 
 
 router = Router(name=__name__)
@@ -207,5 +208,10 @@ async def command_info(message: Message) -> None:
     language_code = await get_user_language(message.from_user.id)
     if language_code not in SUPPORTED_LANGUAGE_CODES:
         language_code = "ru"
-    
-    await message.answer(t(language_code, "info_message"), parse_mode="HTML")
+
+    info_text = t(language_code, "info_message")
+    try:
+        await message.answer(info_text, parse_mode="HTML")
+    except TelegramAPIError:
+        logger.warning("Не удалось отправить /info с HTML premium emoji", exc_info=True)
+        await message.answer(strip_tg_emoji_tags(info_text))

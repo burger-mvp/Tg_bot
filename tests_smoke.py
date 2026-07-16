@@ -26,7 +26,7 @@ from utils.pricing import (
     format_post_text,
     parse_aed_price,
 )
-from utils.premium_emoji import premium_emoji_html
+from utils.premium_emoji import premium_emoji_html, strip_tg_emoji_tags
 from utils.publishing import send_post_content
 
 
@@ -135,6 +135,7 @@ def test_premium_emoji_html() -> None:
     assert '<tg-emoji emoji-id="5395444784611480792">✏️</tg-emoji>' in html_text
     assert "&lt;test&gt;" in html_text
     assert " &amp; " in html_text
+    assert strip_tg_emoji_tags(html_text) == "🇦🇪 &lt;test&gt; ⚠️ &amp; ✏️"
 
 
 def test_main_menus_and_localization() -> None:
