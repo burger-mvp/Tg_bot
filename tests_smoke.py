@@ -144,9 +144,11 @@ def test_main_menus_and_localization() -> None:
         return [button.text for row in main_menu(role, "ru").keyboard for button in row]
 
     assert button_texts("user") == ["Создать пост"]
-    assert button_texts("admin") == ["Создать пост"]
+    assert button_texts("admin") == ["Создать пост", "🚫 Заблокировать пользователя", "✅ Разблокировать пользователя"]
     assert button_texts("super_admin") == [
         "Создать пост",
+        "🚫 Заблокировать пользователя",
+        "✅ Разблокировать пользователя",
         "🌟 Назначить доверенного продавца",
         "👤 Назначить администратора",
         "📋 Просмотр очереди",
@@ -172,6 +174,7 @@ def test_main_menus_and_localization() -> None:
     assert "<tg-emoji" in t("en", "info_message")
     assert t("ru", "banned_user_message") == "Ваш аккаунт заблокирован администратором."
     assert t("en", "banned_user_message") == "Your account has been blocked by an administrator."
+    assert t("ru", "enter_telegram_id_for_ban") == "Введите Telegram ID пользователя, которого нужно заблокировать:"
 
 
 def test_prices_text_and_slots() -> None:

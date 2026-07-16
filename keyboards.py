@@ -22,6 +22,12 @@ def main_menu(role: str, language_code: str) -> ReplyKeyboardMarkup:
     """Создает главное Reply-меню с учетом языка и роли пользователя."""
     buttons = [[KeyboardButton(text=t(language_code, "create_post"))]]
     
+    if role in {"admin", "super_admin"}:
+        buttons.append([
+            KeyboardButton(text=t(language_code, "ban_user")),
+            KeyboardButton(text=t(language_code, "unban_user")),
+        ])
+
     # Для супер-админа добавляем все функции прямо в главное меню
     if role == "super_admin":
         buttons.append([
