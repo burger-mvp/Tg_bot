@@ -165,6 +165,10 @@ def test_main_menus_and_localization() -> None:
     assert t("en", "engine_with_transmission") == "Engine with Gearbox"
     assert t("en", "enter_transmission_price") == "Enter the engine with gearbox price in AED:"
     assert t("en", "enter_engine_price") == "Enter the engine price in AED:"
+    assert "Бот помогает" in t("ru", "info_message")
+    assert "The bot helps" in t("en", "info_message")
+    assert "<tg-emoji" in t("ru", "info_message")
+    assert "<tg-emoji" in t("en", "info_message")
 
 
 def test_prices_text_and_slots() -> None:

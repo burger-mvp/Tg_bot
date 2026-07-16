@@ -185,18 +185,18 @@ EN_TEXTS = {
     "queue_empty": "Queue is empty. All posts have been published.",
     "publication_queue_empty": "Publication queue is empty.",
     "users_export_header": "📊 **Users table export**\n\nFile contains all registered users.",
-    "info_message": """Бот помогает продать Ваши запчасти публикуя их в канале с аудиторией 30 000 человек. Вам нужно только сделать пост с фото или видео Вашего товара, указать цену и добавить описание.
+    "info_message": """The bot helps sell your parts by publishing them in a channel with an audience of 30,000 people. You only need to create a post with photos or video of your item, specify the price and add a description.
 
-Как пользоваться <tg-emoji emoji-id="543611387718941026">❓</tg-emoji>
+How to use <tg-emoji emoji-id="543611387718941026">❓</tg-emoji>
 
-1. <tg-emoji emoji-id="5282843764451195332">🖥️</tg-emoji>Нажмите «Создать пост»
-2. <tg-emoji emoji-id="5253742260054409879">✉️</tg-emoji>Загрузите фото/видео товара
-3. Выберите категорию (Engine or Body parts )
-4. Укажите цену в AED
-5. <tg-emoji emoji-id="5395444784611480792">✏️</tg-emoji>Добавьте описание
-6. Пост отправится на модерацию
+1. <tg-emoji emoji-id="5282843764451195332">🖥️</tg-emoji>Tap “Create post”
+2. <tg-emoji emoji-id="5253742260054409879">✉️</tg-emoji>Upload product photos/videos
+3. Choose a category (Engine or Body parts )
+4. Enter the price in AED
+5. <tg-emoji emoji-id="5395444784611480792">✏️</tg-emoji>Add a description
+6. The post will be sent for moderation
 
-Удачных продаж <tg-emoji emoji-id="5406683434124859552">🛍️</tg-emoji>
+Good sales <tg-emoji emoji-id="5406683434124859552">🛍️</tg-emoji>
 
-<tg-emoji emoji-id="543611387718941026">❓</tg-emoji>Вопросы? Обратитесь к @Kpp_Motors""",
+<tg-emoji emoji-id="543611387718941026">❓</tg-emoji>Questions? Contact @Kpp_Motors""",
 }
