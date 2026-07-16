@@ -26,7 +26,7 @@ from utils.pricing import (
     format_post_text,
     parse_aed_price,
 )
-from utils.premium_emoji import premium_emoji_html, strip_tg_emoji_tags
+from utils.premium_emoji import premium_emoji_html, strip_tg_emoji_tags, tg_emoji_html_to_entities
 from utils.publishing import send_post_content
 
 
@@ -136,6 +136,18 @@ def test_premium_emoji_html() -> None:
     assert "&lt;test&gt;" in html_text
     assert " &amp; " in html_text
     assert strip_tg_emoji_tags(html_text) == "🇦🇪 &lt;test&gt; ⚠️ &amp; ✏️"
+
+
+def test_tg_emoji_html_to_entities() -> None:
+    """HTML premium emoji преобразуется в custom_emoji entities по ID."""
+    text, entities = tg_emoji_html_to_entities(
+        'Как <tg-emoji emoji-id="543611387718941026">❓</tg-emoji> и '
+        '<tg-emoji emoji-id="5282843764451195332">🖥️</tg-emoji> готово',
+    )
+    assert text == "Как ❓ и 🖥️ готово"
+    assert [entity.type for entity in entities] == ["custom_emoji", "custom_emoji"]
+    assert [entity.custom_emoji_id for entity in entities] == ["543611387718941026", "5282843764451195332"]
+    assert [(entity.offset, entity.length) for entity in entities] == [(4, 2), (9, 3)]
 
 
 def test_main_menus_and_localization() -> None:
