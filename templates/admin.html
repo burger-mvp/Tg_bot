@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Админка{% endblock %}
+{% block content %}
+<section class="admin-list">
+  <h1>Объявления сайта</h1>
+  {% for item in listings %}
+  <article class="admin-row">
+    <div>
+      <strong>{{ item.description[:120] }}</strong>
+      <p>{{ item.seller_shop_name }} · ${{ item.price_usd }} USD · статус: {{ item.status }} · заявок: {{ item.requests_count }}</p>
+      <a href="/listing/{{ item.id }}" target="_blank">Открыть</a>
+    </div>
+    <form method="post" action="/admin/listing/{{ item.id }}/status">
+      <input type="hidden" name="password" value="{{ password }}">
+      <select name="status">
+        <option value="active" {% if item.status == 'active' %}selected{% endif %}>active</option>
+        <option value="hidden" {% if item.status == 'hidden' %}selected{% endif %}>hidden</option>
+        <option value="archived" {% if item.status == 'archived' %}selected{% endif %}>archived</option>
+      </select>
+      <button type="submit">Сохранить</button>
+    </form>
+  </article>
+  {% endfor %}
+</section>
+{% endblock %}

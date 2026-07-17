@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Объявление{% endblock %}
+{% block content %}
+<article class="detail">
+  <div class="gallery">
+    {% for media in listing.media %}
+      {% if media.media_type == 'photo' %}
+      <img src="{{ media.url }}" alt="Фото товара">
+      {% else %}
+      <video src="{{ media.url }}" controls playsinline></video>
+      {% endif %}
+    {% endfor %}
+  </div>
+  <div class="detail-info">
+    <p class="seller">{{ listing.seller_shop_name }}</p>
+    <h1>{{ listing.description }}</h1>
+    <p class="price">${{ listing.price_usd }} USD</p>
+    {% if request.query_params.get('sent') %}
+    <div class="notice success">Заявка отправлена. Менеджер свяжется с вами.</div>
+    {% endif %}
+    {% if request.query_params.get('error') == 'phone' %}
+    <div class="notice error">Введите корректный номер телефона.</div>
+    {% endif %}
+    <form class="buy-form" method="post" action="/listing/{{ listing.id }}/buy">
+      <label>Номер телефона для связи</label>
+      <input name="phone_number" type="tel" placeholder="+7 999 123 45 67" required>
+      <button class="button" type="submit">Купить</button>
+    </form>
+  </div>
+</article>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Админка{% endblock %}
+{% block content %}
+<section class="admin-box">
+  <h1>Админка сайта</h1>
+  <form method="post" action="/admin">
+    <label>Пароль</label>
+    <input name="password" type="password" required>
+    <button class="button" type="submit">Войти</button>
+  </form>
+</section>
+{% endblock %}

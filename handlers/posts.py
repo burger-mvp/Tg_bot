@@ -47,6 +47,7 @@ from roles import get_role_from_db_or_config, is_super_admin
 from scheduler.post_scheduler import duplicate_delay, next_free_publication_slot, publication_channel_id
 from utils.pricing import BODY_MARKUP, ENGINE_MARKUP, format_post_text, parse_aed_price, serialize_price
 from utils.publishing import send_queued_post
+from utils.web_sync import publish_post_to_web
 
 
 router = Router(name=__name__)
@@ -657,6 +658,10 @@ async def approve_moderated_post(callback: CallbackQuery, bot: Bot) -> None:
 
         if post.author_telegram_id not in KM_LOGISTICS_IDS:
             await send_queued_post(bot, publication_channel_id(), post)
+            try:
+                await publish_post_to_web(bot, post)
+            except Exception:
+                logger.exception("Пост %s опубликован в Telegram, но не синхронизирован с сайтом", post.id)
             await mark_post_published(post.id, duplicate_delay())
 
         admin_language_code = "ru"

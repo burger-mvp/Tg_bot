@@ -83,6 +83,63 @@ async def _ensure_schema_updates(pool: asyncpg.Pool) -> None:
         await connection.execute(
             "UPDATE post_queue SET language_code = 'ru' WHERE language_code NOT IN ('ru', 'en')"
         )
+        await connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS web_listings (
+                id UUID PRIMARY KEY,
+                post_queue_id UUID UNIQUE REFERENCES post_queue (id) ON DELETE SET NULL,
+                author_telegram_id BIGINT REFERENCES users (telegram_id) ON DELETE SET NULL,
+                seller_shop_name TEXT NOT NULL DEFAULT '—',
+                description TEXT NOT NULL,
+                post_kind VARCHAR(32) NOT NULL,
+                price_data JSONB NOT NULL CHECK (jsonb_typeof(price_data) = 'object'),
+                price_usd INTEGER NOT NULL CHECK (price_usd > 0),
+                status VARCHAR(20) NOT NULL DEFAULT 'active'
+                    CHECK (status IN ('active', 'hidden', 'archived')),
+                published_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        await connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS web_listing_media (
+                id BIGSERIAL PRIMARY KEY,
+                listing_id UUID NOT NULL REFERENCES web_listings (id) ON DELETE CASCADE,
+                media_type VARCHAR(20) NOT NULL CHECK (media_type IN ('photo', 'video', 'document')),
+                url TEXT NOT NULL,
+                object_key TEXT,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        await connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS web_purchase_requests (
+                id BIGSERIAL PRIMARY KEY,
+                listing_id UUID NOT NULL REFERENCES web_listings (id) ON DELETE CASCADE,
+                phone_number TEXT NOT NULL,
+                client_name TEXT,
+                notified_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        await connection.execute(
+            "CREATE INDEX IF NOT EXISTS web_listings_active_idx ON web_listings (published_at DESC) WHERE status = 'active'"
+        )
+        await connection.execute(
+            "CREATE INDEX IF NOT EXISTS web_listings_expires_at_idx ON web_listings (expires_at) WHERE status = 'active'"
+        )
+        await connection.execute(
+            "CREATE INDEX IF NOT EXISTS web_listing_media_listing_idx ON web_listing_media (listing_id, sort_order)"
+        )
+        await connection.execute(
+            "CREATE INDEX IF NOT EXISTS web_purchase_requests_listing_idx ON web_purchase_requests (listing_id, created_at DESC)"
+        )
 
 
 async def close_db() -> None:
@@ -829,3 +886,167 @@ async def get_all_users() -> list[dict[str, Any]]:
         """
     )
     return [dict(r) for r in records]
+
+
+def _listing_price_usd(post_kind: str, price_data: dict[str, Any]) -> int:
+    """Возвращает основную USD-цену объявления для карточки сайта."""
+    if post_kind == "engine_with_transmission":
+        value = price_data.get("engine_with_transmission", {}).get("usd")
+    elif post_kind == "engine_only":
+        value = price_data.get("engine", {}).get("usd")
+    else:
+        value = price_data.get("body", {}).get("usd")
+    return int(value or 1)
+
+
+async def archive_expired_web_listings() -> int:
+    """Архивирует активные объявления старше заданного срока."""
+    result = await _get_pool().execute(
+        """
+        UPDATE web_listings
+        SET status = 'archived', updated_at = NOW()
+        WHERE status = 'active'
+          AND expires_at <= NOW()
+        """
+    )
+    return int(result.split()[-1]) if result.startswith("UPDATE ") else 0
+
+
+async def create_web_listing(
+    *,
+    listing_id: UUID,
+    post: QueuedPost,
+    media: list[dict[str, Any]],
+    retention_days: int,
+) -> None:
+    """Создает или обновляет объявление сайта после успешной публикации в Telegram."""
+    actual_listing_id = await _get_pool().fetchval(
+        """
+        INSERT INTO web_listings (
+            id, post_queue_id, author_telegram_id, seller_shop_name, description,
+            post_kind, price_data, price_usd, published_at, expires_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, NOW(), NOW() + ($9::text || ' days')::interval)
+        ON CONFLICT (post_queue_id) DO UPDATE
+        SET seller_shop_name = EXCLUDED.seller_shop_name,
+            description = EXCLUDED.description,
+            post_kind = EXCLUDED.post_kind,
+            price_data = EXCLUDED.price_data,
+            price_usd = EXCLUDED.price_usd,
+            status = 'active',
+            updated_at = NOW()
+        RETURNING id
+        """,
+        listing_id,
+        post.id,
+        post.author_telegram_id,
+        post.author_shop_name or "—",
+        post.description,
+        post.post_kind,
+        json.dumps(post.price_data),
+        _listing_price_usd(post.post_kind, post.price_data),
+        max(retention_days, 1),
+    )
+    await _get_pool().execute("DELETE FROM web_listing_media WHERE listing_id = $1", actual_listing_id)
+    for index, item in enumerate(media):
+        await _get_pool().execute(
+            """
+            INSERT INTO web_listing_media (listing_id, media_type, url, object_key, sort_order)
+            VALUES ($1, $2, $3, $4, $5)
+            """,
+            actual_listing_id,
+            str(item["media_type"]),
+            str(item["url"]),
+            item.get("object_key"),
+            index,
+        )
+
+
+async def get_web_listings(limit: int = 100, include_hidden: bool = False) -> list[dict[str, Any]]:
+    """Возвращает объявления сайта с первым медиа для ленты или админки."""
+    await archive_expired_web_listings()
+    records = await _get_pool().fetch(
+        """
+        SELECT wl.*,
+               first_media.url AS first_media_url,
+               first_media.media_type AS first_media_type,
+               COUNT(wpr.id)::int AS requests_count
+        FROM web_listings wl
+        LEFT JOIN LATERAL (
+            SELECT url, media_type
+            FROM web_listing_media
+            WHERE listing_id = wl.id
+            ORDER BY sort_order
+            LIMIT 1
+        ) AS first_media ON TRUE
+        LEFT JOIN web_purchase_requests wpr ON wpr.listing_id = wl.id
+        WHERE ($2 OR wl.status = 'active')
+        GROUP BY wl.id, first_media.url, first_media.media_type
+        ORDER BY wl.published_at DESC
+        LIMIT $1
+        """,
+        limit,
+        include_hidden,
+    )
+    return [dict(record) for record in records]
+
+
+async def get_web_listing(listing_id: UUID, include_hidden: bool = False) -> dict[str, Any] | None:
+    """Возвращает одно объявление сайта вместе со всеми медиа."""
+    await archive_expired_web_listings()
+    record = await _get_pool().fetchrow(
+        """
+        SELECT *
+        FROM web_listings
+        WHERE id = $1
+          AND ($2 OR status = 'active')
+        """,
+        listing_id,
+        include_hidden,
+    )
+    if record is None:
+        return None
+    media_records = await _get_pool().fetch(
+        """
+        SELECT media_type, url, object_key, sort_order
+        FROM web_listing_media
+        WHERE listing_id = $1
+        ORDER BY sort_order
+        """,
+        listing_id,
+    )
+    listing = dict(record)
+    listing["media"] = [dict(media) for media in media_records]
+    return listing
+
+
+async def create_purchase_request(listing_id: UUID, phone_number: str, client_name: str | None = None) -> int:
+    """Сохраняет заявку покупателя и возвращает ее ID."""
+    return int(await _get_pool().fetchval(
+        """
+        INSERT INTO web_purchase_requests (listing_id, phone_number, client_name)
+        VALUES ($1, $2, $3)
+        RETURNING id
+        """,
+        listing_id,
+        phone_number,
+        client_name,
+    ))
+
+
+async def mark_purchase_request_notified(request_id: int) -> None:
+    """Отмечает заявку как отправленную менеджерам."""
+    await _get_pool().execute(
+        "UPDATE web_purchase_requests SET notified_at = NOW() WHERE id = $1",
+        request_id,
+    )
+
+
+async def set_web_listing_status(listing_id: UUID, status: str) -> bool:
+    """Меняет видимость объявления в админке сайта."""
+    result = await _get_pool().execute(
+        "UPDATE web_listings SET status = $2, updated_at = NOW() WHERE id = $1",
+        listing_id,
+        status,
+    )
+    return result != "UPDATE 0"

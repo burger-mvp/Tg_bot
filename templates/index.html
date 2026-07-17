@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Объявления{% endblock %}
+{% block content %}
+<section class="hero">
+  <h1>Актуальные объявления</h1>
+  <p>Фото, видео, цена и быстрая заявка на покупку.</p>
+</section>
+<section class="grid">
+  {% for item in listings %}
+  <article class="card">
+    <a href="/listing/{{ item.id }}" class="media-link">
+      {% if item.first_media_type == 'photo' %}
+      <img src="{{ item.first_media_url }}" alt="{{ item.description[:80] }}">
+      {% elif item.first_media_url %}
+      <video src="{{ item.first_media_url }}" muted playsinline></video>
+      {% else %}
+      <div class="placeholder">Нет медиа</div>
+      {% endif %}
+    </a>
+    <div class="card-body">
+      <h2>{{ item.description[:90] }}{% if item.description|length > 90 %}...{% endif %}</h2>
+      <p class="seller">{{ item.seller_shop_name }}</p>
+      <p class="price">${{ item.price_usd }} USD</p>
+      <a class="button" href="/listing/{{ item.id }}">Смотреть и купить</a>
+    </div>
+  </article>
+  {% else %}
+  <p class="empty">Пока нет активных объявлений.</p>
+  {% endfor %}
+</section>
+{% endblock %}

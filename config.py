@@ -51,6 +51,18 @@ def _parse_bool(name: str, default: bool = False) -> bool:
     raise RuntimeError(f"{name} должен быть True или False.")
 
 
+def _parse_positive_int(name: str, default: int) -> int:
+    """Читает положительное целое значение окружения."""
+    raw_value = os.getenv(name, str(default))
+    try:
+        value = int(raw_value)
+    except ValueError as error:
+        raise RuntimeError(f"{name} должен быть целым числом.") from error
+    if value <= 0:
+        raise RuntimeError(f"{name} должен быть больше нуля.")
+    return value
+
+
 TOKEN = _required_value("TOKEN")
 DATABASE_URL = _required_value("DATABASE_URL")
 
@@ -67,8 +79,22 @@ except ValueError as error:
 SUPER_ADMIN_IDS = _parse_admin_ids(_required_value("SUPER_ADMIN_IDS"))
 ADMIN_IDS = _parse_admin_ids(_required_value("ADMIN_IDS"))
 KM_LOGISTICS_IDS = _parse_optional_ids("KM_LOGISTICS_IDS")
+SALES_MANAGER_IDS = _parse_optional_ids("SALES_MANAGER_IDS")
 TEST_MODE = _parse_bool("TEST_MODE")
 TELEGRAM_API_SERVER_URL = os.getenv("TELEGRAM_API_SERVER_URL", "").strip().rstrip("/") or None
+WEB_PUBLIC_URL = os.getenv("WEB_PUBLIC_URL", "").strip().rstrip("/") or None
+WEB_ADMIN_PASSWORD = os.getenv("WEB_ADMIN_PASSWORD", "").strip() or None
+WEB_LISTING_RETENTION_DAYS = _parse_positive_int("WEB_LISTING_RETENTION_DAYS", 30)
+
+S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL", "").strip() or None
+S3_ACCESS_KEY_ID = os.getenv("S3_ACCESS_KEY_ID", "").strip() or None
+S3_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_ACCESS_KEY", "").strip() or None
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "").strip() or None
+S3_REGION = os.getenv("S3_REGION", "auto").strip() or "auto"
+
+WEB_INTEGRATION_ENABLED = all(
+    (S3_ENDPOINT_URL, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET_NAME)
+)
 
 # Время работы очереди определяется в локальном часовом поясе бизнеса.
 # По умолчанию публикации идут с 09:00 до 22:00 по московскому времени.

@@ -25,6 +25,7 @@ from database import (
     recover_interrupted_posts,
 )
 from utils.publishing import send_queued_post
+from utils.web_sync import publish_post_to_web
 
 
 logger = logging.getLogger(__name__)
@@ -176,6 +177,11 @@ class PostScheduler:
             logger.exception("Не удалось опубликовать пост %s в канале: %s", post.id, error)
             await mark_publication_failed(post.id, str(error), next_publication_slot(now + queue_slot_interval()))
             return
+
+        try:
+            await publish_post_to_web(self._bot, post)
+        except Exception:
+            logger.exception("Пост %s опубликован в Telegram, но не синхронизирован с сайтом", post.id)
 
         duplicate_due_at = await mark_post_published(post.id, duplicate_delay())
         if duplicate_due_at is not None:
