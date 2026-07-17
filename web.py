@@ -140,7 +140,7 @@ async def _notify_sales_managers(listing: dict, phone_number: str, request_id: i
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     listings = await get_web_listings(limit=120)
-    return templates.TemplateResponse("index.html", {"request": request, "listings": listings})
+    return templates.TemplateResponse(request, "index.html", {"listings": listings})
 
 
 @app.get("/listing/{listing_id}", response_class=HTMLResponse)
@@ -148,7 +148,7 @@ async def listing_detail(request: Request, listing_id: UUID) -> HTMLResponse:
     listing = await get_web_listing(listing_id)
     if listing is None:
         raise HTTPException(status_code=404, detail="Объявление не найдено")
-    return templates.TemplateResponse("listing.html", {"request": request, "listing": listing})
+    return templates.TemplateResponse(request, "listing.html", {"listing": listing})
 
 
 @app.post("/listing/{listing_id}/buy")
@@ -166,7 +166,7 @@ async def buy_listing(request: Request, listing_id: UUID, phone_number: str = Fo
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_login(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("admin_login.html", {"request": request})
+    return templates.TemplateResponse(request, "admin_login.html")
 
 
 @app.post("/admin", response_class=HTMLResponse)
@@ -174,8 +174,9 @@ async def admin_listings(request: Request, password: str = Form(...)) -> HTMLRes
     _admin_allowed(password)
     listings = await get_web_listings(limit=300, include_hidden=True)
     return templates.TemplateResponse(
+        request,
         "admin.html",
-        {"request": request, "listings": listings, "password": password},
+        {"listings": listings, "password": password},
     )
 
 
