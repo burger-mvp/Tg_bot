@@ -962,6 +962,56 @@ async def create_web_listing(
         )
 
 
+async def create_web_listing_from_payload(*, payload: dict[str, Any], retention_days: int) -> UUID:
+    """Создает или обновляет объявление сайта из API-запроса удаленного бота."""
+    listing_id = UUID(str(payload["listing_id"]))
+    post_queue_id = UUID(str(payload["post_queue_id"]))
+    price_data = payload.get("price_data") or {}
+    post_kind = str(payload["post_kind"])
+    actual_listing_id = await _get_pool().fetchval(
+        """
+        INSERT INTO web_listings (
+            id, post_queue_id, author_telegram_id, seller_shop_name, description,
+            post_kind, price_data, price_usd, published_at, expires_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, NOW(), NOW() + ($9::text || ' days')::interval)
+        ON CONFLICT (post_queue_id) DO UPDATE
+        SET seller_shop_name = EXCLUDED.seller_shop_name,
+            description = EXCLUDED.description,
+            post_kind = EXCLUDED.post_kind,
+            price_data = EXCLUDED.price_data,
+            price_usd = EXCLUDED.price_usd,
+            status = 'active',
+            expires_at = EXCLUDED.expires_at,
+            updated_at = NOW()
+        RETURNING id
+        """,
+        listing_id,
+        post_queue_id,
+        int(payload["author_telegram_id"]),
+        str(payload.get("seller_shop_name") or "—"),
+        str(payload["description"]),
+        post_kind,
+        json.dumps(price_data),
+        int(payload.get("price_usd") or _listing_price_usd(post_kind, price_data)),
+        max(retention_days, 1),
+    )
+    await _get_pool().execute("DELETE FROM web_listing_media WHERE listing_id = $1", actual_listing_id)
+    for index, item in enumerate(payload.get("media") or []):
+        await _get_pool().execute(
+            """
+            INSERT INTO web_listing_media (listing_id, media_type, url, object_key, sort_order)
+            VALUES ($1, $2, $3, $4, $5)
+            """,
+            actual_listing_id,
+            str(item["media_type"]),
+            str(item["url"]),
+            item.get("object_key"),
+            index,
+        )
+    return actual_listing_id
+
+
 async def get_web_listings(limit: int = 100, include_hidden: bool = False) -> list[dict[str, Any]]:
     """Возвращает объявления сайта с первым медиа для ленты или админки."""
     await archive_expired_web_listings()

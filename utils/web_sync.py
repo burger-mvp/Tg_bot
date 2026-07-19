@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from io import BytesIO
+from urllib import error, request
 from uuid import uuid4
 
 from aiogram import Bot
@@ -17,8 +18,12 @@ from config import (
     S3_SECRET_ACCESS_KEY,
     WEB_INTEGRATION_ENABLED,
     WEB_LISTING_RETENTION_DAYS,
+    WEB_PUBLIC_URL,
+    WEB_REMOTE_SYNC_ENABLED,
+    WEB_SYNC_API_KEY,
 )
 from database import QueuedPost, create_web_listing
+from database import _listing_price_usd
 
 
 logger = logging.getLogger(__name__)
@@ -74,6 +79,30 @@ async def _upload_to_bucket(object_key: str, data: bytes, media_type: str) -> No
     )
 
 
+def _send_listing_to_site(payload: dict) -> None:
+    """Отправляет объявление на сайт Timeweb через защищенный HTTP API."""
+    import json
+
+    if not WEB_PUBLIC_URL or not WEB_SYNC_API_KEY:
+        return
+    body = json.dumps(payload).encode("utf-8")
+    api_request = request.Request(
+        f"{WEB_PUBLIC_URL}/api/listings",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Site-Api-Key": WEB_SYNC_API_KEY,
+        },
+        method="POST",
+    )
+    try:
+        with request.urlopen(api_request, timeout=20) as response:
+            response.read()
+    except error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Сайт вернул HTTP {exc.code}: {detail}") from exc
+
+
 async def publish_post_to_web(bot: Bot, post: QueuedPost) -> None:
     """Создает объявление сайта с теми же медиа, что опубликованы в Telegram."""
     if not WEB_INTEGRATION_ENABLED:
@@ -100,6 +129,21 @@ async def publish_post_to_web(bot: Bot, post: QueuedPost) -> None:
 
     if not uploaded_media:
         logger.warning("У поста %s нет медиа для сайта, объявление не создано.", post.id)
+        return
+
+    if WEB_REMOTE_SYNC_ENABLED:
+        payload = {
+            "listing_id": str(listing_id),
+            "post_queue_id": str(post.id),
+            "author_telegram_id": post.author_telegram_id,
+            "seller_shop_name": post.author_shop_name or "—",
+            "description": post.description,
+            "post_kind": post.post_kind,
+            "price_data": post.price_data,
+            "price_usd": _listing_price_usd(post.post_kind, post.price_data),
+            "media": uploaded_media,
+        }
+        await asyncio.to_thread(_send_listing_to_site, payload)
         return
 
     await create_web_listing(

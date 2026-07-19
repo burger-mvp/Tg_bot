@@ -10,7 +10,7 @@ from uuid import UUID
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, Form, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -24,11 +24,14 @@ from config import (
     SALES_MANAGER_IDS,
     TOKEN,
     WEB_ADMIN_PASSWORD,
+    WEB_LISTING_RETENTION_DAYS,
     WEB_PUBLIC_URL,
+    WEB_SYNC_API_KEY,
 )
 from database import (
     close_db,
     create_purchase_request,
+    create_web_listing_from_payload,
     get_web_listing,
     get_web_listings,
     init_db,
@@ -141,6 +144,26 @@ async def _notify_sales_managers(listing: dict, phone_number: str, request_id: i
 async def index(request: Request) -> HTMLResponse:
     listings = await get_web_listings(limit=120)
     return templates.TemplateResponse(request, "index.html", {"listings": listings})
+
+
+@app.post("/api/listings")
+async def api_create_listing(payload: dict, x_site_api_key: str | None = Header(default=None)) -> dict[str, str]:
+    """Принимает объявление от Railway-бота и сохраняет его в локальную базу сайта."""
+    if WEB_SYNC_API_KEY is None:
+        raise HTTPException(status_code=403, detail="WEB_SYNC_API_KEY не задан.")
+    if x_site_api_key != WEB_SYNC_API_KEY:
+        raise HTTPException(status_code=401, detail="Неверный API-ключ.")
+    media = payload.get("media") or []
+    if not media:
+        raise HTTPException(status_code=400, detail="Нет медиа для объявления.")
+    try:
+        listing_id = await create_web_listing_from_payload(
+            payload=payload,
+            retention_days=WEB_LISTING_RETENTION_DAYS,
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        raise HTTPException(status_code=400, detail="Некорректные данные объявления.") from error
+    return {"status": "ok", "listing_id": str(listing_id)}
 
 
 @app.get("/listing/{listing_id}", response_class=HTMLResponse)

@@ -84,6 +84,7 @@ TEST_MODE = _parse_bool("TEST_MODE")
 TELEGRAM_API_SERVER_URL = os.getenv("TELEGRAM_API_SERVER_URL", "").strip().rstrip("/") or None
 WEB_PUBLIC_URL = os.getenv("WEB_PUBLIC_URL", "").strip().rstrip("/") or None
 WEB_ADMIN_PASSWORD = os.getenv("WEB_ADMIN_PASSWORD", "").strip() or None
+WEB_SYNC_API_KEY = os.getenv("WEB_SYNC_API_KEY", "").strip() or None
 WEB_LISTING_RETENTION_DAYS = _parse_positive_int("WEB_LISTING_RETENTION_DAYS", 30)
 
 S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL", "").strip() or None
@@ -95,6 +96,7 @@ S3_REGION = os.getenv("S3_REGION", "auto").strip() or "auto"
 WEB_INTEGRATION_ENABLED = all(
     (S3_ENDPOINT_URL, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET_NAME)
 )
+WEB_REMOTE_SYNC_ENABLED = bool(WEB_PUBLIC_URL and WEB_SYNC_API_KEY)
 
 # Время работы очереди определяется в локальном часовом поясе бизнеса.
 # По умолчанию публикации идут с 09:00 до 22:00 по московскому времени.
