@@ -137,7 +137,7 @@ async def _notify_sales_managers(listing: dict, phone_number: str, request_id: i
         await bot.session.close()
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     listings = await get_web_listings(limit=120)
     return templates.TemplateResponse(request, "index.html", {"listings": listings})
