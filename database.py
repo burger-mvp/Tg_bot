@@ -945,7 +945,7 @@ async def create_web_listing(
         post.post_kind,
         json.dumps(post.price_data),
         _listing_price_usd(post.post_kind, post.price_data),
-        max(retention_days, 1),
+        str(max(retention_days, 1)),
     )
     await _get_pool().execute("DELETE FROM web_listing_media WHERE listing_id = $1", actual_listing_id)
     for index, item in enumerate(media):
@@ -994,7 +994,7 @@ async def create_web_listing_from_payload(*, payload: dict[str, Any], retention_
         post_kind,
         json.dumps(price_data),
         int(payload.get("price_usd") or _listing_price_usd(post_kind, price_data)),
-        max(retention_days, 1),
+        str(max(retention_days, 1)),
     )
     await _get_pool().execute("DELETE FROM web_listing_media WHERE listing_id = $1", actual_listing_id)
     for index, item in enumerate(payload.get("media") or []):
