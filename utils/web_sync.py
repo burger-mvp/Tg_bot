@@ -16,6 +16,8 @@ from config import (
     S3_ENDPOINT_URL,
     S3_REGION,
     S3_SECRET_ACCESS_KEY,
+    TELEGRAM_API_SERVER_URL,
+    TOKEN,
     WEB_INTEGRATION_ENABLED,
     WEB_LISTING_RETENTION_DAYS,
     WEB_PUBLIC_URL,
@@ -62,6 +64,13 @@ def _content_type(media_type: str) -> str:
 
 async def _download_telegram_file(bot: Bot, file_id: str) -> bytes:
     """Скачивает Telegram-файл в память."""
+    if TELEGRAM_API_SERVER_URL:
+        file = await bot.get_file(file_id)
+        if not file.file_path:
+            raise RuntimeError(f"Telegram не вернул путь файла {file_id}")
+        file_url = f"{TELEGRAM_API_SERVER_URL}/file/bot{TOKEN}/{file.file_path}"
+        return await asyncio.to_thread(lambda: request.urlopen(file_url, timeout=60).read())
+
     buffer = BytesIO()
     await bot.download(file_id, destination=buffer)
     return buffer.getvalue()
