@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from io import BytesIO
 from urllib import error, request
@@ -62,6 +63,19 @@ def _content_type(media_type: str) -> str:
     return "application/octet-stream"
 
 
+def _download_official_telegram_file(file_id: str) -> bytes:
+    """Скачивает Telegram-файл через официальный API, заново получая file_path."""
+    get_file_url = f"https://api.telegram.org/bot{TOKEN}/getFile?file_id={file_id}"
+    with request.urlopen(get_file_url, timeout=30) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    file_path = payload.get("result", {}).get("file_path")
+    if not file_path:
+        raise RuntimeError(f"Официальный Telegram API не вернул путь файла {file_id}: {payload}")
+    file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
+    with request.urlopen(file_url, timeout=60) as response:
+        return response.read()
+
+
 async def _download_telegram_file(bot: Bot, file_id: str) -> bytes:
     """Скачивает Telegram-файл в память."""
     if TELEGRAM_API_SERVER_URL:
@@ -69,7 +83,6 @@ async def _download_telegram_file(bot: Bot, file_id: str) -> bytes:
         if not file.file_path:
             raise RuntimeError(f"Telegram не вернул путь файла {file_id}")
         local_file_url = f"{TELEGRAM_API_SERVER_URL}/file/bot{TOKEN}/{file.file_path}"
-        official_file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file.file_path}"
 
         try:
             return await asyncio.to_thread(lambda: request.urlopen(local_file_url, timeout=60).read())
@@ -77,7 +90,7 @@ async def _download_telegram_file(bot: Bot, file_id: str) -> bytes:
             if exc.code != 404:
                 raise
             logger.warning("Локальный Telegram API не отдал файл %s, пробуем официальный API.", file.file_path)
-            return await asyncio.to_thread(lambda: request.urlopen(official_file_url, timeout=60).read())
+            return await asyncio.to_thread(_download_official_telegram_file, file_id)
 
     buffer = BytesIO()
     await bot.download(file_id, destination=buffer)
