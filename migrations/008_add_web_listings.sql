@@ -2,7 +2,7 @@
 
 CREATE TABLE IF NOT EXISTS web_listings (
     id UUID PRIMARY KEY,
-    post_queue_id UUID UNIQUE REFERENCES post_queue (id) ON DELETE SET NULL,
+    post_queue_id UUID UNIQUE,
     author_telegram_id BIGINT REFERENCES users (telegram_id) ON DELETE SET NULL,
     seller_shop_name TEXT NOT NULL DEFAULT '—',
     description TEXT NOT NULL,
