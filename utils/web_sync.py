@@ -68,8 +68,16 @@ async def _download_telegram_file(bot: Bot, file_id: str) -> bytes:
         file = await bot.get_file(file_id)
         if not file.file_path:
             raise RuntimeError(f"Telegram не вернул путь файла {file_id}")
-        file_url = f"{TELEGRAM_API_SERVER_URL}/file/bot{TOKEN}/{file.file_path}"
-        return await asyncio.to_thread(lambda: request.urlopen(file_url, timeout=60).read())
+        local_file_url = f"{TELEGRAM_API_SERVER_URL}/file/bot{TOKEN}/{file.file_path}"
+        official_file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file.file_path}"
+
+        try:
+            return await asyncio.to_thread(lambda: request.urlopen(local_file_url, timeout=60).read())
+        except error.HTTPError as exc:
+            if exc.code != 404:
+                raise
+            logger.warning("Локальный Telegram API не отдал файл %s, пробуем официальный API.", file.file_path)
+            return await asyncio.to_thread(lambda: request.urlopen(official_file_url, timeout=60).read())
 
     buffer = BytesIO()
     await bot.download(file_id, destination=buffer)
