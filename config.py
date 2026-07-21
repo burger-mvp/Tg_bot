@@ -86,6 +86,9 @@ WEB_PUBLIC_URL = os.getenv("WEB_PUBLIC_URL", "").strip().rstrip("/") or None
 WEB_ADMIN_PASSWORD = os.getenv("WEB_ADMIN_PASSWORD", "").strip() or None
 WEB_SYNC_API_KEY = os.getenv("WEB_SYNC_API_KEY", "").strip() or None
 WEB_LISTING_RETENTION_DAYS = _parse_positive_int("WEB_LISTING_RETENTION_DAYS", 30)
+SITE_CONTACT_PHONE = os.getenv("SITE_CONTACT_PHONE", "+7 999 000-00-00").strip()
+SITE_CONTACT_TELEGRAM_URL = os.getenv("SITE_CONTACT_TELEGRAM_URL", "https://t.me/Kpp_Motors").strip()
+SITE_CONTACT_MAX_URL = os.getenv("SITE_CONTACT_MAX_URL", "").strip() or None
 
 S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL", "").strip() or None
 S3_ACCESS_KEY_ID = os.getenv("S3_ACCESS_KEY_ID", "").strip() or None

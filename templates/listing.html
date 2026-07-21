@@ -15,17 +15,19 @@
     <p class="seller">{{ listing.seller_shop_name }}</p>
     <h1>{{ listing.description }}</h1>
     <p class="price">${{ listing.price_usd }} USD</p>
-    {% if request.query_params.get('sent') %}
-    <div class="notice success">Заявка отправлена. Менеджер свяжется с вами.</div>
-    {% endif %}
-    {% if request.query_params.get('error') == 'phone' %}
-    <div class="notice error">Введите корректный номер телефона.</div>
-    {% endif %}
-    <form class="buy-form" method="post" action="/listing/{{ listing.id }}/buy">
-      <label>Номер телефона для связи</label>
-      <input name="phone_number" type="tel" placeholder="+7 999 123 45 67" required>
-      <button class="button" type="submit">Купить</button>
-    </form>
+    <section class="delivery-box">
+      {{ delivery_text }}
+    </section>
+    <section class="contact-box">
+      <h2>Для совершения покупки позвоните или напишите нам</h2>
+      <a class="phone-link" href="tel:{{ contact_phone|replace(' ', '')|replace('-', '')|replace('(', '')|replace(')', '') }}">{{ contact_phone }}</a>
+      <div class="contact-actions">
+        <a class="button" href="{{ telegram_url }}" target="_blank" rel="noopener">Написать в Telegram</a>
+        {% if max_url %}
+        <a class="button secondary" href="{{ max_url }}" target="_blank" rel="noopener">Написать в MAX</a>
+        {% endif %}
+      </div>
+    </section>
   </div>
 </article>
 {% endblock %}

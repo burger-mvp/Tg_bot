@@ -1,9 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Объявления{% endblock %}
+{% block title %}KM Logistics — запчасти из ОАЭ{% endblock %}
 {% block content %}
 <section class="hero">
-  <h1>Актуальные объявления</h1>
-  <p>Фото, видео, цена и быстрая заявка на покупку.</p>
+  <div class="hero-badge">Запчасти под заказ и в наличии</div>
+  <h1>Актуальные предложения KM Logistics</h1>
+  <p>Двигатели, КПП, кузовные детали и спецтехника. Фото, видео, цена и быстрый контакт с менеджером.</p>
 </section>
 <section class="grid">
   {% for item in listings %}
@@ -18,10 +19,10 @@
       {% endif %}
     </a>
     <div class="card-body">
-      <h2>{{ item.description[:90] }}{% if item.description|length > 90 %}...{% endif %}</h2>
+      <h2>{{ item.description[:110] }}{% if item.description|length > 110 %}...{% endif %}</h2>
       <p class="seller">{{ item.seller_shop_name }}</p>
       <p class="price">${{ item.price_usd }} USD</p>
-      <a class="button" href="/listing/{{ item.id }}">Смотреть и купить</a>
+      <a class="button" href="/listing/{{ item.id }}">Смотреть</a>
     </div>
   </article>
   {% else %}

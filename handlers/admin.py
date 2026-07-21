@@ -3,7 +3,9 @@
 import csv
 import io
 import logging
+import re
 from datetime import datetime
+from uuid import UUID
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -27,6 +29,7 @@ from database import (
 from keyboards import cancel_keyboard, main_menu
 from locales import SUPPORTED_LANGUAGE_CODES, t
 from roles import is_admin_or_higher, is_super_admin
+from utils.web_sync import hide_listing_on_site
 
 
 router = Router(name=__name__)
@@ -35,12 +38,20 @@ SET_TRUSTED_SELLER_TEXTS = frozenset({"🌟 Назначить доверенн�
 SET_ADMIN_TEXTS = frozenset({"👤 Назначить администратора", "👤 Assign administrator"})
 BAN_USER_TEXTS = frozenset({"🚫 Заблокировать пользователя", "🚫 Block user"})
 UNBAN_USER_TEXTS = frozenset({"✅ Разблокировать пользователя", "✅ Unblock user"})
+DELETE_WEB_LISTING_TEXTS = frozenset({"🗑 Удалить объявление с сайта", "🗑 Delete site listing"})
 VIEW_QUEUE_TEXTS = frozenset({"📋 Просмотр очереди", "📋 View queue"})
 EXPORT_USERS_TEXTS = frozenset({"📊 Выгрузить users", "📊 Export users"})
 SUPER_ADMIN_ACTION_TEXTS = (
-    SET_TRUSTED_SELLER_TEXTS | SET_ADMIN_TEXTS | BAN_USER_TEXTS | UNBAN_USER_TEXTS | VIEW_QUEUE_TEXTS | EXPORT_USERS_TEXTS
+    SET_TRUSTED_SELLER_TEXTS
+    | SET_ADMIN_TEXTS
+    | BAN_USER_TEXTS
+    | UNBAN_USER_TEXTS
+    | DELETE_WEB_LISTING_TEXTS
+    | VIEW_QUEUE_TEXTS
+    | EXPORT_USERS_TEXTS
 )
-ADMIN_ACTION_TEXTS = BAN_USER_TEXTS | UNBAN_USER_TEXTS
+ADMIN_ACTION_TEXTS = BAN_USER_TEXTS | UNBAN_USER_TEXTS | DELETE_WEB_LISTING_TEXTS
+LISTING_ID_RE = re.compile(r"/listing/([0-9a-fA-F-]{36})")
 
 
 class TrustedSellerAssignment(StatesGroup):
@@ -60,6 +71,12 @@ class UserBanAssignment(StatesGroup):
 
     waiting_for_ban_id = State()
     waiting_for_unban_id = State()
+
+
+class WebListingDeletion(StatesGroup):
+    """Ожидание ссылки на объявление сайта для скрытия."""
+
+    waiting_for_listing_url = State()
 
 
 def _telegram_id_from_command(message: Message) -> int | None:
@@ -363,6 +380,63 @@ async def reject_non_text_telegram_id(message: Message, state: FSMContext) -> No
     data = await state.get_data()
     language_code = data.get("language_code", "ru")
     await message.answer(t(language_code, "enter_telegram_id_for_admin"))
+
+
+@router.message(StateFilter("*"), F.text.in_(DELETE_WEB_LISTING_TEXTS))
+async def start_web_listing_deletion(message: Message, state: FSMContext) -> None:
+    """Запрашивает ссылку на объявление сайта для скрытия."""
+    if message.from_user is None:
+        return
+    language_code = await _admin_language(message)
+    if not await is_admin_or_higher(message.from_user.id):
+        await message.answer(t(language_code, "access_denied"))
+        return
+
+    await state.clear()
+    await state.set_state(WebListingDeletion.waiting_for_listing_url)
+    await state.update_data(language_code=language_code)
+    await message.answer(t(language_code, "delete_web_listing_prompt"), reply_markup=cancel_keyboard(language_code))
+
+
+@router.message(WebListingDeletion.waiting_for_listing_url, F.text, ~F.text.in_(SUPER_ADMIN_ACTION_TEXTS | ADMIN_ACTION_TEXTS))
+async def process_web_listing_deletion(message: Message, state: FSMContext) -> None:
+    """Скрывает объявление сайта по ссылке или UUID."""
+    if message.from_user is None or message.text is None:
+        return
+    data = await state.get_data()
+    language_code = data.get("language_code", "ru")
+    if not await is_admin_or_higher(message.from_user.id):
+        await state.clear()
+        await message.answer(t(language_code, "access_denied"))
+        return
+
+    raw_value = message.text.strip()
+    match = LISTING_ID_RE.search(raw_value)
+    listing_id_text = match.group(1) if match else raw_value
+    try:
+        listing_id = str(UUID(listing_id_text))
+    except ValueError:
+        await message.answer(t(language_code, "delete_web_listing_invalid"))
+        return
+
+    try:
+        hide_listing_on_site(listing_id)
+    except Exception as error:
+        logger.exception("Не удалось скрыть объявление сайта %s", listing_id)
+        await message.answer(t(language_code, "delete_web_listing_failed", error=error))
+        return
+
+    await state.clear()
+    role = "super_admin" if is_super_admin(message.from_user.id) else "admin"
+    await message.answer(t(language_code, "delete_web_listing_success"), reply_markup=main_menu(role, language_code))
+
+
+@router.message(WebListingDeletion.waiting_for_listing_url)
+async def reject_non_text_web_listing_deletion(message: Message, state: FSMContext) -> None:
+    """Просит прислать ссылку текстом."""
+    data = await state.get_data()
+    language_code = data.get("language_code", "ru")
+    await message.answer(t(language_code, "delete_web_listing_prompt"))
 
 
 @router.message(StateFilter("*"), F.text.in_(VIEW_QUEUE_TEXTS))

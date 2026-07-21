@@ -110,7 +110,7 @@ async def _upload_to_bucket(object_key: str, data: bytes, media_type: str) -> No
 
 
 def _send_listing_to_site(payload: dict) -> None:
-    """Отправляет объявление на сайт Timeweb через защищенный HTTP API."""
+    """Отправляет объявление на сайт через защищенный HTTP API."""
     import json
 
     if not WEB_PUBLIC_URL or not WEB_SYNC_API_KEY:
@@ -123,6 +123,24 @@ def _send_listing_to_site(payload: dict) -> None:
             "Content-Type": "application/json",
             "X-Site-Api-Key": WEB_SYNC_API_KEY,
         },
+        method="POST",
+    )
+    try:
+        with request.urlopen(api_request, timeout=20) as response:
+            response.read()
+    except error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Сайт вернул HTTP {exc.code}: {detail}") from exc
+
+
+def hide_listing_on_site(listing_id: str) -> None:
+    """Скрывает объявление на сайте через защищенный HTTP API."""
+    if not WEB_PUBLIC_URL or not WEB_SYNC_API_KEY:
+        raise RuntimeError("WEB_PUBLIC_URL или WEB_SYNC_API_KEY не задан.")
+    api_request = request.Request(
+        f"{WEB_PUBLIC_URL}/api/listings/{listing_id}/hide",
+        data=b"",
+        headers={"X-Site-Api-Key": WEB_SYNC_API_KEY},
         method="POST",
     )
     try:

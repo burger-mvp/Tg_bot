@@ -1,17 +1,13 @@
-"""Простой сайт объявлений и админка."""
+"""Витрина объявлений и API синхронизации с Telegram-ботом."""
 
 from __future__ import annotations
 
-import html
 import logging
-import re
 import asyncio
 from uuid import UUID
 
-from aiogram import Bot
-from aiogram.exceptions import TelegramAPIError
-from fastapi import FastAPI, Form, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -21,21 +17,19 @@ from config import (
     S3_ENDPOINT_URL,
     S3_REGION,
     S3_SECRET_ACCESS_KEY,
-    SALES_MANAGER_IDS,
-    TOKEN,
-    WEB_ADMIN_PASSWORD,
+    SITE_CONTACT_MAX_URL,
+    SITE_CONTACT_PHONE,
+    SITE_CONTACT_TELEGRAM_URL,
     WEB_LISTING_RETENTION_DAYS,
     WEB_PUBLIC_URL,
     WEB_SYNC_API_KEY,
 )
 from database import (
     close_db,
-    create_purchase_request,
     create_web_listing_from_payload,
     get_web_listing,
     get_web_listings,
     init_db,
-    mark_purchase_request_notified,
     set_web_listing_status,
 )
 
@@ -44,7 +38,12 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="KPP Motors Listings")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
-_PHONE_RE = re.compile(r"^[0-9+()\-\s]{6,32}$")
+DELIVERY_TEXT = """Все запчасти согласовываются с вами в онлайн-режиме, что упрощает процесс. ‼️
+
+Условия доставки:
+🚨 ДВС, КПП и ходовая часть: 2,3$ за кг.
+🚨 Кузовные детали, оптика, машинокомплекты — по запросу.
+🚨 Запчасти для спецтехники Caterpillar, Komatsu, JCB — по запросу."""
 
 
 def _s3_client():
@@ -85,10 +84,6 @@ async def shutdown() -> None:
     await close_db()
 
 
-def _base_url(request: Request) -> str:
-    return WEB_PUBLIC_URL or str(request.base_url).rstrip("/")
-
-
 @app.get("/media/{object_key:path}")
 async def bucket_media(object_key: str) -> Response:
     """Отдает файлы сайта из приватного Bucket через приложение."""
@@ -105,39 +100,6 @@ async def bucket_media(object_key: str) -> Response:
         raise HTTPException(status_code=404, detail="Файл не найден") from error
     data = await asyncio.to_thread(result["Body"].read)
     return Response(data, media_type=result.get("ContentType") or _media_content_type(object_key))
-
-
-def _admin_allowed(password: str | None = None) -> None:
-    if WEB_ADMIN_PASSWORD is None:
-        raise HTTPException(status_code=403, detail="WEB_ADMIN_PASSWORD не задан.")
-    if password != WEB_ADMIN_PASSWORD:
-        raise HTTPException(status_code=401, detail="Неверный пароль.")
-
-
-async def _notify_sales_managers(listing: dict, phone_number: str, request_id: int, request: Request) -> None:
-    if not SALES_MANAGER_IDS:
-        logger.warning("SALES_MANAGER_IDS не задан, заявка %s сохранена без Telegram-уведомления", request_id)
-        return
-
-    listing_url = f"{_base_url(request)}/listing/{listing['id']}"
-    text = (
-        "🛒 Новая заявка с сайта\n\n"
-        f"Телефон клиента: {html.escape(phone_number)}\n"
-        f"Цена: ${listing['price_usd']} USD\n"
-        f"Магазин: {html.escape(listing['seller_shop_name'])}\n\n"
-        f"Объявление: {listing_url}\n\n"
-        f"Описание: {html.escape(str(listing['description'])[:500])}"
-    )
-    bot = Bot(token=TOKEN)
-    try:
-        for manager_id in SALES_MANAGER_IDS:
-            try:
-                await bot.send_message(manager_id, text)
-            except TelegramAPIError:
-                logger.exception("Не удалось отправить заявку %s менеджеру %s", request_id, manager_id)
-        await mark_purchase_request_notified(request_id)
-    finally:
-        await bot.session.close()
 
 
 @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -171,47 +133,26 @@ async def listing_detail(request: Request, listing_id: UUID) -> HTMLResponse:
     listing = await get_web_listing(listing_id)
     if listing is None:
         raise HTTPException(status_code=404, detail="Объявление не найдено")
-    return templates.TemplateResponse(request, "listing.html", {"listing": listing})
-
-
-@app.post("/listing/{listing_id}/buy")
-async def buy_listing(request: Request, listing_id: UUID, phone_number: str = Form(...)) -> RedirectResponse:
-    listing = await get_web_listing(listing_id)
-    if listing is None:
-        raise HTTPException(status_code=404, detail="Объявление не найдено")
-    phone = phone_number.strip()
-    if not _PHONE_RE.fullmatch(phone):
-        return RedirectResponse(f"/listing/{listing_id}?error=phone", status_code=303)
-    request_id = await create_purchase_request(listing_id, phone)
-    await _notify_sales_managers(listing, phone, request_id, request)
-    return RedirectResponse(f"/listing/{listing_id}?sent=1", status_code=303)
-
-
-@app.get("/admin", response_class=HTMLResponse)
-async def admin_login(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "admin_login.html")
-
-
-@app.post("/admin", response_class=HTMLResponse)
-async def admin_listings(request: Request, password: str = Form(...)) -> HTMLResponse:
-    _admin_allowed(password)
-    listings = await get_web_listings(limit=300, include_hidden=True)
     return templates.TemplateResponse(
         request,
-        "admin.html",
-        {"listings": listings, "password": password},
+        "listing.html",
+        {
+            "listing": listing,
+            "delivery_text": DELIVERY_TEXT,
+            "contact_phone": SITE_CONTACT_PHONE,
+            "telegram_url": SITE_CONTACT_TELEGRAM_URL,
+            "max_url": SITE_CONTACT_MAX_URL,
+        },
     )
 
 
-@app.post("/admin/listing/{listing_id}/status")
-async def admin_set_status(
-    listing_id: UUID,
-    password: str = Form(...),
-    status: str = Form(...),
-) -> RedirectResponse:
-    _admin_allowed(password)
-    if status not in {"active", "hidden", "archived"}:
-        raise HTTPException(status_code=400, detail="Некорректный статус")
-    if not await set_web_listing_status(listing_id, status):
+@app.post("/api/listings/{listing_id}/hide")
+async def api_hide_listing(listing_id: UUID, x_site_api_key: str | None = Header(default=None)) -> dict[str, str]:
+    """Скрывает объявление по защищенному API для Telegram-бота."""
+    if WEB_SYNC_API_KEY is None:
+        raise HTTPException(status_code=403, detail="WEB_SYNC_API_KEY не задан.")
+    if x_site_api_key != WEB_SYNC_API_KEY:
+        raise HTTPException(status_code=401, detail="Неверный API-ключ.")
+    if not await set_web_listing_status(listing_id, "hidden"):
         raise HTTPException(status_code=404, detail="Объявление не найдено")
-    return RedirectResponse("/admin", status_code=303)
+    return {"status": "ok"}

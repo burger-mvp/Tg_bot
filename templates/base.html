@@ -3,13 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Объявления{% endblock %}</title>
+  <title>{% block title %}KM Logistics{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
 </head>
 <body>
+  <div class="page-glow"></div>
   <header class="site-header">
-    <a class="logo" href="/">KPP Motors</a>
-    <a class="admin-link" href="/admin">Админка</a>
+    <a class="logo" href="/"><span>KM</span> Logistics</a>
+    <a class="header-cta" href="/">Каталог запчастей</a>
   </header>
   <main>{% block content %}{% endblock %}</main>
 </body>
