@@ -29,8 +29,8 @@ from utils.web_sync import publish_post_to_web
 
 
 logger = logging.getLogger(__name__)
-WORKDAY_START = time(hour=9)
-WORKDAY_END = time(hour=22, minute=30)
+WORKDAY_START = time(hour=8, minute=30)
+WORKDAY_END = time(hour=21)
 SLOT_INTERVAL = timedelta(minutes=30)
 DUPLICATE_RETRY_DELAY = timedelta(minutes=5)
 PENDING_DUPLICATES_SYNC_INTERVAL = timedelta(minutes=1)
@@ -59,7 +59,7 @@ def next_publication_slot(now: datetime | None = None) -> datetime:
     current = now.astimezone(SCHEDULER_TIMEZONE) if now else datetime.now(SCHEDULER_TIMEZONE)
     if TEST_MODE:
         return current.replace(second=0, microsecond=0) + TEST_QUEUE_INTERVAL
-    day_start = current.replace(hour=WORKDAY_START.hour, minute=0, second=0, microsecond=0)
+    day_start = current.replace(hour=WORKDAY_START.hour, minute=WORKDAY_START.minute, second=0, microsecond=0)
     day_end = current.replace(hour=WORKDAY_END.hour, minute=WORKDAY_END.minute, second=0, microsecond=0)
 
     if current < day_start:
@@ -88,7 +88,7 @@ def next_free_publication_slot(
         return next_publication_slot(now)
 
     next_slot = last_scheduled_at.astimezone(SCHEDULER_TIMEZONE) + queue_slot_interval()
-    day_start = next_slot.replace(hour=WORKDAY_START.hour, minute=0, second=0, microsecond=0)
+    day_start = next_slot.replace(hour=WORKDAY_START.hour, minute=WORKDAY_START.minute, second=0, microsecond=0)
     day_end = next_slot.replace(
         hour=WORKDAY_END.hour,
         minute=WORKDAY_END.minute,

@@ -232,16 +232,13 @@ def test_prices_text_and_slots() -> None:
 
     moscow = ZoneInfo("Europe/Moscow")
     assert next_publication_slot(datetime(2026, 7, 13, 8, 29, tzinfo=moscow)).isoformat().startswith(
-        "2026-07-13T09:00:00"
+        "2026-07-13T08:30:00"
     )
-    assert next_publication_slot(datetime(2026, 7, 13, 21, 31, tzinfo=moscow)).isoformat().startswith(
-        "2026-07-13T22:00:00"
+    assert next_publication_slot(datetime(2026, 7, 13, 20, 31, tzinfo=moscow)).isoformat().startswith(
+        "2026-07-13T21:00:00"
     )
-    assert next_publication_slot(datetime(2026, 7, 13, 22, 1, tzinfo=moscow)).isoformat().startswith(
-        "2026-07-13T22:30:00"
-    )
-    assert next_publication_slot(datetime(2026, 7, 13, 22, 31, tzinfo=moscow)).isoformat().startswith(
-        "2026-07-14T09:00:00"
+    assert next_publication_slot(datetime(2026, 7, 13, 21, 1, tzinfo=moscow)).isoformat().startswith(
+        "2026-07-14T08:30:00"
     )
     assert next_free_publication_slot(None, datetime(2026, 7, 13, 13, 8, tzinfo=moscow)).isoformat().startswith(
         "2026-07-13T13:30:00"
@@ -253,10 +250,10 @@ def test_prices_text_and_slots() -> None:
         "2026-07-13T14:00:00"
     )
     assert next_free_publication_slot(
-        datetime(2026, 7, 13, 22, 30, tzinfo=moscow),
+        datetime(2026, 7, 13, 21, 0, tzinfo=moscow),
         datetime(2026, 7, 13, 13, 8, tzinfo=moscow),
     ).isoformat().startswith(
-        "2026-07-14T09:00:00"
+        "2026-07-14T08:30:00"
     )
     assert queue_slot_interval().total_seconds() == 30 * 60
     assert duplicate_delay().total_seconds() == 7 * 24 * 60 * 60
