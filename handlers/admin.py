@@ -511,7 +511,6 @@ async def weekly_publication_report(message: Message, state: FSMContext) -> None
                 count=row["posts_count"],
                 telegram_id=row["author_telegram_id"],
                 user_label=" / ".join(user_label_parts) or "—",
-                post_ids=", ".join(row.get("post_ids") or []),
             )
         )
     await message.answer("\n\n".join(lines))
