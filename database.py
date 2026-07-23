@@ -508,7 +508,7 @@ async def claim_next_queued_post(ignore_schedule: bool = False) -> QueuedPost | 
             FROM post_queue
             WHERE status = 'queued'
               AND ($1 OR scheduled_at <= NOW())
-            ORDER BY approved_at NULLS LAST, created_at
+            ORDER BY scheduled_at, approved_at NULLS LAST, created_at
             FOR UPDATE SKIP LOCKED
             LIMIT 1
         ), updated AS (

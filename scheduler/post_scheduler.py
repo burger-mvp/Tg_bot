@@ -31,6 +31,7 @@ from utils.web_sync import publish_post_to_web
 logger = logging.getLogger(__name__)
 WORKDAY_START = time(hour=8, minute=30)
 WORKDAY_END = time(hour=21)
+LAST_SLOT_GRACE_END = time(hour=21, minute=1)
 SLOT_INTERVAL = timedelta(minutes=30)
 DUPLICATE_RETRY_DELAY = timedelta(minutes=5)
 PENDING_DUPLICATES_SYNC_INTERVAL = timedelta(minutes=1)
@@ -129,8 +130,16 @@ class PostScheduler:
         else:
             self._scheduler.add_job(
                 self.publish_next_post,
-                CronTrigger(hour="8-21", minute="0,30", timezone=SCHEDULER_TIMEZONE),
+                CronTrigger(hour="8-20", minute="0,30", timezone=SCHEDULER_TIMEZONE),
                 id="publish_queue_half_hour_slots",
+                replace_existing=True,
+                coalesce=True,
+                max_instances=1,
+            )
+            self._scheduler.add_job(
+                self.publish_next_post,
+                CronTrigger(hour="21", minute="0,1", timezone=SCHEDULER_TIMEZONE),
+                id="publish_queue_last_slot_with_grace",
                 replace_existing=True,
                 coalesce=True,
                 max_instances=1,
@@ -165,7 +174,7 @@ class PostScheduler:
         """Отправляет только один пост в текущем слоте очереди."""
         now = datetime.now(SCHEDULER_TIMEZONE)
         current_time = now.time().replace(tzinfo=None)
-        if not TEST_MODE and (current_time < WORKDAY_START or current_time > WORKDAY_END):
+        if not TEST_MODE and (current_time < WORKDAY_START or current_time > LAST_SLOT_GRACE_END):
             return
 
         post = await claim_next_queued_post(ignore_schedule=TEST_MODE)
