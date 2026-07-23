@@ -672,6 +672,7 @@ async def view_queue_status(message: Message, state: FSMContext) -> None:
                         index=index,
                         shop_name=post.author_shop_name or "—",
                         scheduled_at=post.scheduled_at.astimezone(SCHEDULER_TIMEZONE).strftime("%d.%m %H:%M"),
+                        post_id=post.id,
                         description=post.description[:80],
                     )
                 )
@@ -688,6 +689,7 @@ async def view_queue_status(message: Message, state: FSMContext) -> None:
                         index=index,
                         shop_name=post.author_shop_name or "—",
                         duplicate_due_at=duplicate_due_at.astimezone(SCHEDULER_TIMEZONE).strftime("%d.%m %H:%M"),
+                        post_id=post.id,
                         description=post.description[:80],
                     )
                 )
