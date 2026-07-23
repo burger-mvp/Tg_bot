@@ -27,7 +27,10 @@ def main_menu(role: str, language_code: str) -> ReplyKeyboardMarkup:
             KeyboardButton(text=t(language_code, "ban_user")),
             KeyboardButton(text=t(language_code, "unban_user")),
         ])
-        buttons.append([KeyboardButton(text=t(language_code, "delete_web_listing"))])
+        buttons.append([
+            KeyboardButton(text=t(language_code, "delete_web_listing")),
+            KeyboardButton(text=t(language_code, "edit_published_post")),
+        ])
 
     # Для супер-админа добавляем все функции прямо в главное меню
     if role == "super_admin":
@@ -39,6 +42,7 @@ def main_menu(role: str, language_code: str) -> ReplyKeyboardMarkup:
             KeyboardButton(text=t(language_code, "view_queue")),
             KeyboardButton(text=t(language_code, "export_users")),
         ])
+        buttons.append([KeyboardButton(text=t(language_code, "weekly_publication_report"))])
 
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 

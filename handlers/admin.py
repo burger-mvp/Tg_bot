@@ -4,7 +4,7 @@ import csv
 import io
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from aiogram import F, Router
@@ -17,19 +17,24 @@ from aiogram.types import BufferedInputFile, Message
 from config import SCHEDULER_TIMEZONE
 from database import (
     find_user_for_role_assignment,
+    get_post,
     get_all_users,
     get_posts_waiting_for_duplicate_details,
     get_queued_posts,
     get_queue_statistics,
     get_user_language,
+    get_weekly_publication_report,
     set_user_banned,
     set_user_admin,
     set_user_trusted_seller,
+    update_published_post_text,
 )
 from keyboards import cancel_keyboard, main_menu
 from locales import SUPPORTED_LANGUAGE_CODES, t
 from roles import is_admin_or_higher, is_super_admin
-from utils.web_sync import hide_listing_on_site
+from utils.pricing import format_post_caption, format_post_text
+from utils.premium_emoji import premium_emoji_html
+from utils.web_sync import hide_listing_on_site, update_listing_description_on_site
 
 
 router = Router(name=__name__)
@@ -39,18 +44,22 @@ SET_ADMIN_TEXTS = frozenset({"👤 Назначить администратор
 BAN_USER_TEXTS = frozenset({"🚫 Заблокировать пользователя", "🚫 Block user"})
 UNBAN_USER_TEXTS = frozenset({"✅ Разблокировать пользователя", "✅ Unblock user"})
 DELETE_WEB_LISTING_TEXTS = frozenset({"🗑 Удалить объявление с сайта", "🗑 Delete site listing"})
+EDIT_PUBLISHED_POST_TEXTS = frozenset({"✏️ Редактировать опубликованный пост", "✏️ Edit published post"})
 VIEW_QUEUE_TEXTS = frozenset({"📋 Просмотр очереди", "📋 View queue"})
 EXPORT_USERS_TEXTS = frozenset({"📊 Выгрузить users", "📊 Export users"})
+WEEKLY_REPORT_TEXTS = frozenset({"📈 Недельная отчетность", "📈 Weekly report"})
 SUPER_ADMIN_ACTION_TEXTS = (
     SET_TRUSTED_SELLER_TEXTS
     | SET_ADMIN_TEXTS
     | BAN_USER_TEXTS
     | UNBAN_USER_TEXTS
     | DELETE_WEB_LISTING_TEXTS
+    | EDIT_PUBLISHED_POST_TEXTS
     | VIEW_QUEUE_TEXTS
     | EXPORT_USERS_TEXTS
+    | WEEKLY_REPORT_TEXTS
 )
-ADMIN_ACTION_TEXTS = BAN_USER_TEXTS | UNBAN_USER_TEXTS | DELETE_WEB_LISTING_TEXTS
+ADMIN_ACTION_TEXTS = BAN_USER_TEXTS | UNBAN_USER_TEXTS | DELETE_WEB_LISTING_TEXTS | EDIT_PUBLISHED_POST_TEXTS
 LISTING_ID_RE = re.compile(r"/listing/([0-9a-fA-F-]{36})")
 
 
@@ -77,6 +86,13 @@ class WebListingDeletion(StatesGroup):
     """Ожидание ссылки на объявление сайта для скрытия."""
 
     waiting_for_listing_url = State()
+
+
+class PublishedPostEdit(StatesGroup):
+    """Ожидание UUID и нового описания опубликованного поста."""
+
+    waiting_for_post_id = State()
+    waiting_for_description = State()
 
 
 def _telegram_id_from_command(message: Message) -> int | None:
@@ -437,6 +453,176 @@ async def reject_non_text_web_listing_deletion(message: Message, state: FSMConte
     data = await state.get_data()
     language_code = data.get("language_code", "ru")
     await message.answer(t(language_code, "delete_web_listing_prompt"))
+
+
+@router.message(StateFilter("*"), F.text.in_(WEEKLY_REPORT_TEXTS))
+async def weekly_publication_report(message: Message, state: FSMContext) -> None:
+    """Показывает супер-админу отчет по публикациям за последние семь дней."""
+    if message.from_user is None:
+        return
+    language_code = await _admin_language(message)
+    if not is_super_admin(message.from_user.id):
+        await message.answer(t(language_code, "access_denied"))
+        return
+
+    await state.clear()
+    since = datetime.now(SCHEDULER_TIMEZONE) - timedelta(days=7)
+    rows = await get_weekly_publication_report(since)
+    if not rows:
+        await message.answer(t(language_code, "weekly_report_empty"))
+        return
+
+    total = sum(int(row["posts_count"]) for row in rows)
+    lines = [t(language_code, "weekly_report_header", total=total).rstrip()]
+    for index, row in enumerate(rows, start=1):
+        user_label_parts = []
+        if row.get("username"):
+            user_label_parts.append(f"@{row['username']}")
+        if row.get("name"):
+            user_label_parts.append(str(row["name"]))
+        lines.append(
+            t(
+                language_code,
+                "weekly_report_item",
+                index=index,
+                shop_name=row.get("shop_name") or "—",
+                count=row["posts_count"],
+                telegram_id=row["author_telegram_id"],
+                user_label=" / ".join(user_label_parts) or "—",
+                post_ids=", ".join(row.get("post_ids") or []),
+            )
+        )
+    await message.answer("\n\n".join(lines))
+
+
+@router.message(StateFilter("*"), F.text.in_(EDIT_PUBLISHED_POST_TEXTS))
+async def start_published_post_edit(message: Message, state: FSMContext) -> None:
+    """Запрашивает UUID опубликованного поста для редактирования."""
+    if message.from_user is None:
+        return
+    language_code = await _admin_language(message)
+    if not await is_admin_or_higher(message.from_user.id):
+        await message.answer(t(language_code, "access_denied"))
+        return
+
+    await state.clear()
+    await state.set_state(PublishedPostEdit.waiting_for_post_id)
+    await state.update_data(language_code=language_code)
+    await message.answer(t(language_code, "edit_published_post_id_prompt"), reply_markup=cancel_keyboard(language_code))
+
+
+@router.message(PublishedPostEdit.waiting_for_post_id, F.text, ~F.text.in_(SUPER_ADMIN_ACTION_TEXTS | ADMIN_ACTION_TEXTS))
+async def receive_published_post_id(message: Message, state: FSMContext) -> None:
+    """Проверяет UUID опубликованного поста и просит новый текст."""
+    if message.from_user is None or message.text is None:
+        return
+    data = await state.get_data()
+    language_code = data.get("language_code", "ru")
+    if not await is_admin_or_higher(message.from_user.id):
+        await state.clear()
+        await message.answer(t(language_code, "access_denied"))
+        return
+    try:
+        post_id = UUID(message.text.strip())
+    except ValueError:
+        await message.answer(t(language_code, "edit_published_post_invalid_id"))
+        return
+
+    post = await get_post(post_id)
+    if post is None or post.status not in {"published", "duplicate_publishing"}:
+        await message.answer(t(language_code, "edit_published_post_not_found"))
+        return
+    await state.set_state(PublishedPostEdit.waiting_for_description)
+    await state.update_data(post_id=str(post_id), language_code=language_code)
+    await message.answer(t(language_code, "edit_published_post_text_prompt"))
+
+
+@router.message(PublishedPostEdit.waiting_for_description, F.text, ~F.text.in_(SUPER_ADMIN_ACTION_TEXTS | ADMIN_ACTION_TEXTS))
+async def save_published_post_edit(message: Message, state: FSMContext) -> None:
+    """Обновляет опубликованный пост в БД, Telegram и на сайте."""
+    if message.from_user is None or message.text is None:
+        return
+    data = await state.get_data()
+    language_code = data.get("language_code", "ru")
+    if not await is_admin_or_higher(message.from_user.id):
+        await state.clear()
+        await message.answer(t(language_code, "access_denied"))
+        return
+
+    description = message.text.strip()
+    if not description:
+        await message.answer(t(language_code, "description_empty"))
+        return
+    post_id = UUID(str(data["post_id"]))
+    old_post = await get_post(post_id)
+    if old_post is None or old_post.status not in {"published", "duplicate_publishing"}:
+        await state.clear()
+        await message.answer(t(language_code, "edit_published_post_not_found"))
+        return
+
+    post_text = format_post_text(
+        description,
+        old_post.post_kind,
+        old_post.price_data,
+        seller_name=old_post.author_shop_name,
+        language_code=old_post.language_code,
+    )
+    updated_post = await update_published_post_text(post_id, description, post_text)
+    if updated_post is None:
+        await state.clear()
+        await message.answer(t(language_code, "edit_published_post_not_found"))
+        return
+
+    telegram_status = t(language_code, "edit_published_post_no_message")
+    if updated_post.published_channel_id is not None and updated_post.published_message_ids:
+        caption = premium_emoji_html(
+            format_post_caption(
+                updated_post.description,
+                updated_post.post_kind,
+                updated_post.price_data,
+                seller_name=updated_post.author_shop_name,
+                language_code=updated_post.language_code,
+            )
+        )
+        try:
+            await message.bot.edit_message_caption(
+                chat_id=updated_post.published_channel_id,
+                message_id=updated_post.published_message_ids[0],
+                caption=caption,
+                parse_mode="HTML",
+            )
+            telegram_status = t(language_code, "edit_published_post_telegram_ok")
+        except Exception as error:
+            logger.exception("Не удалось обновить опубликованное Telegram-сообщение поста %s", post_id)
+            telegram_status = t(language_code, "edit_published_post_telegram_failed", error=error)
+
+    try:
+        update_listing_description_on_site(str(post_id), description)
+        site_status = t(language_code, "edit_published_post_site_ok")
+    except Exception as error:
+        logger.warning("Не удалось обновить описание сайта для поста %s: %s", post_id, error)
+        site_status = t(language_code, "edit_published_post_site_failed", error=error)
+
+    await state.clear()
+    role = "super_admin" if is_super_admin(message.from_user.id) else "admin"
+    await message.answer(
+        t(language_code, "edit_published_post_saved", telegram_status=telegram_status, site_status=site_status),
+        reply_markup=main_menu(role, language_code),
+    )
+
+
+@router.message(PublishedPostEdit.waiting_for_post_id)
+async def reject_non_text_published_post_id(message: Message, state: FSMContext) -> None:
+    """Просит UUID опубликованного поста текстом."""
+    data = await state.get_data()
+    await message.answer(t(data.get("language_code", "ru"), "edit_published_post_id_prompt"))
+
+
+@router.message(PublishedPostEdit.waiting_for_description)
+async def reject_non_text_published_post_description(message: Message, state: FSMContext) -> None:
+    """Просит новое описание текстом."""
+    data = await state.get_data()
+    await message.answer(t(data.get("language_code", "ru"), "edit_published_post_text_prompt"))
 
 
 @router.message(StateFilter("*"), F.text.in_(VIEW_QUEUE_TEXTS))

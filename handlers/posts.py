@@ -657,12 +657,18 @@ async def approve_moderated_post(callback: CallbackQuery, bot: Bot) -> None:
             return
 
         if post.author_telegram_id not in KM_LOGISTICS_IDS:
-            await send_queued_post(bot, publication_channel_id(), post)
+            channel_id = publication_channel_id()
+            messages = await send_queued_post(bot, channel_id, post)
             try:
                 await publish_post_to_web(bot, post)
             except Exception:
                 logger.exception("Пост %s опубликован в Telegram, но не синхронизирован с сайтом", post.id)
-            await mark_post_published(post.id, duplicate_delay())
+            await mark_post_published(
+                post.id,
+                duplicate_delay(),
+                channel_id=channel_id,
+                message_ids=[message.message_id for message in messages],
+            )
 
         admin_language_code = "ru"
         await callback.answer(t(admin_language_code, "moderation_approved"))

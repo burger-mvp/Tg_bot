@@ -31,6 +31,7 @@ from database import (
     get_web_listings,
     init_db,
     set_web_listing_status,
+    update_web_listing_description_by_post,
 )
 
 
@@ -154,5 +155,24 @@ async def api_hide_listing(listing_id: UUID, x_site_api_key: str | None = Header
     if x_site_api_key != WEB_SYNC_API_KEY:
         raise HTTPException(status_code=401, detail="Неверный API-ключ.")
     if not await set_web_listing_status(listing_id, "hidden"):
+        raise HTTPException(status_code=404, detail="Объявление не найдено")
+    return {"status": "ok"}
+
+
+@app.post("/api/listings/by-post/{post_queue_id}/description")
+async def api_update_listing_description(
+    post_queue_id: UUID,
+    payload: dict,
+    x_site_api_key: str | None = Header(default=None),
+) -> dict[str, str]:
+    """Обновляет описание объявления сайта по UUID поста очереди."""
+    if WEB_SYNC_API_KEY is None:
+        raise HTTPException(status_code=403, detail="WEB_SYNC_API_KEY не задан.")
+    if x_site_api_key != WEB_SYNC_API_KEY:
+        raise HTTPException(status_code=401, detail="Неверный API-ключ.")
+    description = str(payload.get("description") or "").strip()
+    if not description:
+        raise HTTPException(status_code=400, detail="Описание не может быть пустым.")
+    if not await update_web_listing_description_by_post(post_queue_id, description):
         raise HTTPException(status_code=404, detail="Объявление не найдено")
     return {"status": "ok"}

@@ -151,6 +151,28 @@ def hide_listing_on_site(listing_id: str) -> None:
         raise RuntimeError(f"Сайт вернул HTTP {exc.code}: {detail}") from exc
 
 
+def update_listing_description_on_site(post_queue_id: str, description: str) -> None:
+    """Обновляет описание объявления сайта по UUID поста очереди."""
+    if not WEB_PUBLIC_URL or not WEB_SYNC_API_KEY:
+        raise RuntimeError("WEB_PUBLIC_URL или WEB_SYNC_API_KEY не задан.")
+    body = json.dumps({"description": description}).encode("utf-8")
+    api_request = request.Request(
+        f"{WEB_PUBLIC_URL}/api/listings/by-post/{post_queue_id}/description",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Site-Api-Key": WEB_SYNC_API_KEY,
+        },
+        method="POST",
+    )
+    try:
+        with request.urlopen(api_request, timeout=20) as response:
+            response.read()
+    except error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Сайт вернул HTTP {exc.code}: {detail}") from exc
+
+
 async def publish_post_to_web(bot: Bot, post: QueuedPost) -> None:
     """Создает объявление сайта с теми же медиа, что опубликованы в Telegram."""
     if not WEB_INTEGRATION_ENABLED:

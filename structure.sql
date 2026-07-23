@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS post_queue (
     duplicate_due_at TIMESTAMPTZ,
     moderation_chat_id BIGINT,
     moderation_message_id BIGINT,
+    published_channel_id BIGINT,
+    published_message_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
     attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
     last_error TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

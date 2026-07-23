@@ -38,6 +38,8 @@ class QueuedPost:
     duplicate_due_at: datetime | None
     moderation_chat_id: int | None
     moderation_message_id: int | None
+    published_channel_id: int | None
+    published_message_ids: list[int]
 
 
 async def init_db() -> None:
@@ -82,6 +84,12 @@ async def _ensure_schema_updates(pool: asyncpg.Pool) -> None:
         )
         await connection.execute(
             "UPDATE post_queue SET language_code = 'ru' WHERE language_code NOT IN ('ru', 'en')"
+        )
+        await connection.execute(
+            "ALTER TABLE post_queue ADD COLUMN IF NOT EXISTS published_channel_id BIGINT"
+        )
+        await connection.execute(
+            "ALTER TABLE post_queue ADD COLUMN IF NOT EXISTS published_message_ids JSONB NOT NULL DEFAULT '[]'::jsonb"
         )
         await connection.execute(
             """
@@ -172,6 +180,7 @@ def _record_to_post(record: asyncpg.Record) -> QueuedPost:
     record_data = dict(record)
     media_value = _decode_json(record["media_file_ids"], [])
     prices_value = _decode_json(record["price_data"], {})
+    message_ids_value = _decode_json(record_data.get("published_message_ids"), [])
     media_items: list[dict[str, str]] = []
     if isinstance(media_value, list):
         for item in media_value:
@@ -205,6 +214,8 @@ def _record_to_post(record: asyncpg.Record) -> QueuedPost:
         duplicate_due_at=record["duplicate_due_at"],
         moderation_chat_id=record["moderation_chat_id"],
         moderation_message_id=record["moderation_message_id"],
+        published_channel_id=record_data.get("published_channel_id"),
+        published_message_ids=[int(item) for item in message_ids_value if isinstance(item, int)],
     )
 
 
@@ -517,7 +528,13 @@ async def claim_next_queued_post(ignore_schedule: bool = False) -> QueuedPost | 
     return _record_to_post(record) if record is not None else None
 
 
-async def mark_post_published(post_id: UUID, duplicate_after: timedelta) -> datetime | None:
+async def mark_post_published(
+    post_id: UUID,
+    duplicate_after: timedelta,
+    *,
+    channel_id: int | None = None,
+    message_ids: list[int] | None = None,
+) -> datetime | None:
     """Фиксирует публикацию и возвращает момент однократного повтора."""
     return await _get_pool().fetchval(
         """
@@ -525,6 +542,8 @@ async def mark_post_published(post_id: UUID, duplicate_after: timedelta) -> date
         SET status = 'published',
             published_at = NOW(),
             duplicate_due_at = NOW() + $2::interval,
+            published_channel_id = COALESCE($3, published_channel_id),
+            published_message_ids = COALESCE($4::jsonb, published_message_ids),
             updated_at = NOW(),
             last_error = NULL
         WHERE id = $1
@@ -533,6 +552,8 @@ async def mark_post_published(post_id: UUID, duplicate_after: timedelta) -> date
         """,
         post_id,
         duplicate_after,
+        channel_id,
+        json.dumps(message_ids) if message_ids is not None else None,
     )
 
 
@@ -868,6 +889,52 @@ async def get_posts_waiting_for_duplicate_details(limit: int = 20) -> list[Queue
     return [_record_to_post(record) for record in records]
 
 
+async def get_weekly_publication_report(since: datetime) -> list[dict[str, Any]]:
+    """Возвращает статистику публикаций за период по авторам."""
+    records = await _get_pool().fetch(
+        """
+        SELECT pq.author_telegram_id,
+               COALESCE(u.shop_name, '—') AS shop_name,
+               COALESCE(u.username, '') AS username,
+               COALESCE(u.name, '') AS name,
+               COUNT(*)::int AS posts_count,
+               ARRAY_AGG(pq.id::text ORDER BY pq.published_at DESC) AS post_ids
+        FROM post_queue pq
+        LEFT JOIN users u ON u.telegram_id = pq.author_telegram_id
+        WHERE pq.published_at >= $1
+          AND pq.status IN ('published', 'duplicate_publishing')
+        GROUP BY pq.author_telegram_id, u.shop_name, u.username, u.name
+        ORDER BY posts_count DESC, shop_name
+        """,
+        since,
+    )
+    return [dict(record) for record in records]
+
+
+async def update_published_post_text(post_id: UUID, description: str, post_text: str) -> QueuedPost | None:
+    """Обновляет текст уже опубликованного поста в базе для будущих дублей и сайта."""
+    record = await _get_pool().fetchrow(
+        """
+        WITH updated AS (
+            UPDATE post_queue
+            SET description = $2,
+                post_text = $3,
+                updated_at = NOW()
+            WHERE id = $1
+              AND status IN ('published', 'duplicate_publishing')
+            RETURNING *
+        )
+        SELECT updated.*, u.shop_name AS author_shop_name
+        FROM updated
+        JOIN users u ON u.telegram_id = updated.author_telegram_id
+        """,
+        post_id,
+        description,
+        post_text,
+    )
+    return _record_to_post(record) if record is not None else None
+
+
 async def get_all_users() -> list[dict[str, Any]]:
     """Возвращает всех зарегистрированных пользователей для экспорта."""
     records = await _get_pool().fetch(
@@ -1098,5 +1165,15 @@ async def set_web_listing_status(listing_id: UUID, status: str) -> bool:
         "UPDATE web_listings SET status = $2, updated_at = NOW() WHERE id = $1",
         listing_id,
         status,
+    )
+    return result != "UPDATE 0"
+
+
+async def update_web_listing_description_by_post(post_queue_id: UUID, description: str) -> bool:
+    """Обновляет описание карточки сайта по UUID поста очереди."""
+    result = await _get_pool().execute(
+        "UPDATE web_listings SET description = $2, updated_at = NOW() WHERE post_queue_id = $1",
+        post_queue_id,
+        description,
     )
     return result != "UPDATE 0"

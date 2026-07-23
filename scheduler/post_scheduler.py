@@ -129,7 +129,7 @@ class PostScheduler:
         else:
             self._scheduler.add_job(
                 self.publish_next_post,
-                CronTrigger(hour="9-22", minute="0,30", timezone=SCHEDULER_TIMEZONE),
+                CronTrigger(hour="8-21", minute="0,30", timezone=SCHEDULER_TIMEZONE),
                 id="publish_queue_half_hour_slots",
                 replace_existing=True,
                 coalesce=True,
@@ -171,8 +171,9 @@ class PostScheduler:
         post = await claim_next_queued_post(ignore_schedule=TEST_MODE)
         if post is None:
             return
+        channel_id = publication_channel_id()
         try:
-            await send_queued_post(self._bot, publication_channel_id(), post)
+            messages = await send_queued_post(self._bot, channel_id, post)
         except TelegramAPIError as error:
             logger.exception("Не удалось опубликовать пост %s в канале: %s", post.id, error)
             await mark_publication_failed(post.id, str(error), next_publication_slot(now + queue_slot_interval()))
@@ -183,7 +184,12 @@ class PostScheduler:
         except Exception:
             logger.exception("Пост %s опубликован в Telegram, но не синхронизирован с сайтом", post.id)
 
-        duplicate_due_at = await mark_post_published(post.id, duplicate_delay())
+        duplicate_due_at = await mark_post_published(
+            post.id,
+            duplicate_delay(),
+            channel_id=channel_id,
+            message_ids=[message.message_id for message in messages],
+        )
         if duplicate_due_at is not None:
             self.schedule_duplicate(post.id, duplicate_due_at)
 
