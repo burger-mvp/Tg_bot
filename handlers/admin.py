@@ -611,14 +611,14 @@ async def save_published_post_edit(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(PublishedPostEdit.waiting_for_post_id)
+@router.message(PublishedPostEdit.waiting_for_post_id, ~F.text.in_(SUPER_ADMIN_ACTION_TEXTS | ADMIN_ACTION_TEXTS))
 async def reject_non_text_published_post_id(message: Message, state: FSMContext) -> None:
     """Просит UUID опубликованного поста текстом."""
     data = await state.get_data()
     await message.answer(t(data.get("language_code", "ru"), "edit_published_post_id_prompt"))
 
 
-@router.message(PublishedPostEdit.waiting_for_description)
+@router.message(PublishedPostEdit.waiting_for_description, ~F.text.in_(SUPER_ADMIN_ACTION_TEXTS | ADMIN_ACTION_TEXTS))
 async def reject_non_text_published_post_description(message: Message, state: FSMContext) -> None:
     """Просит новое описание текстом."""
     data = await state.get_data()
