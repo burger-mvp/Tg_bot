@@ -12,7 +12,7 @@ from aiogram.filters import Command
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import BufferedInputFile, Message
+from aiogram.types import BufferedInputFile, CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from config import SCHEDULER_TIMEZONE
 from database import (
@@ -39,6 +39,7 @@ from utils.web_sync import hide_listing_on_site, update_listing_description_on_s
 
 router = Router(name=__name__)
 logger = logging.getLogger(__name__)
+COPY_BUTTONS_PER_ROW = 3
 SET_TRUSTED_SELLER_TEXTS = frozenset({"🌟 Назначить доверенного продавца", "🌟 Assign trusted seller"})
 SET_ADMIN_TEXTS = frozenset({"👤 Назначить администратора", "👤 Assign administrator"})
 BAN_USER_TEXTS = frozenset({"🚫 Заблокировать пользователя", "🚫 Block user"})
@@ -61,6 +62,27 @@ SUPER_ADMIN_ACTION_TEXTS = (
 )
 ADMIN_ACTION_TEXTS = BAN_USER_TEXTS | UNBAN_USER_TEXTS | DELETE_WEB_LISTING_TEXTS | EDIT_PUBLISHED_POST_TEXTS
 LISTING_ID_RE = re.compile(r"/listing/([0-9a-fA-F-]{36})")
+
+
+def _copy_post_ids_keyboard(post_ids: list[tuple[int, UUID]]) -> InlineKeyboardMarkup | None:
+    """Создает кнопки Telegram для копирования UUID постов из очереди."""
+    if not post_ids:
+        return None
+    rows: list[list[InlineKeyboardButton]] = []
+    current_row: list[InlineKeyboardButton] = []
+    for index, post_id in post_ids:
+        current_row.append(
+            InlineKeyboardButton(
+                text=f"📋 ID {index}",
+                copy_text=CopyTextButton(text=str(post_id)),
+            )
+        )
+        if len(current_row) == COPY_BUTTONS_PER_ROW:
+            rows.append(current_row)
+            current_row = []
+    if current_row:
+        rows.append(current_row)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 class TrustedSellerAssignment(StatesGroup):
@@ -662,9 +684,11 @@ async def view_queue_status(message: Message, state: FSMContext) -> None:
             published=published,
             waiting_duplicate=waiting_duplicate,
         )
+        copy_post_ids: list[tuple[int, UUID]] = []
         if queued_posts:
             queue_lines = [t(language_code, "queue_list_header")]
             for index, post in enumerate(queued_posts, start=1):
+                copy_post_ids.append((index, post.id))
                 queue_lines.append(
                     t(
                         language_code,
@@ -680,7 +704,9 @@ async def view_queue_status(message: Message, state: FSMContext) -> None:
 
         if duplicate_posts:
             duplicate_lines = [t(language_code, "duplicate_list_header")]
-            for index, post in enumerate(duplicate_posts, start=1):
+            for post in duplicate_posts:
+                index = len(copy_post_ids) + 1
+                copy_post_ids.append((index, post.id))
                 duplicate_due_at = post.duplicate_due_at or post.scheduled_at
                 duplicate_lines.append(
                     t(
@@ -695,7 +721,7 @@ async def view_queue_status(message: Message, state: FSMContext) -> None:
                 )
             message_text = f"{message_text}\n\n" + "\n".join(duplicate_lines)
 
-        await message.answer(message_text)
+        await message.answer(message_text, reply_markup=_copy_post_ids_keyboard(copy_post_ids))
     except Exception as error:
         logger.exception("Ошибка при выводе очереди для супер-админа %s", message.from_user.id)
         await message.answer(f"Ошибка при выводе очереди: {error}")
